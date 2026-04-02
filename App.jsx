@@ -163,6 +163,7 @@ export default function App() {
   const [showEnviados, setShowEnviados] = useState(false)
   const [addingList, setAddingList] = useState(false)
   const [newNumbers, setNewNumbers] = useState('')
+  const [msgPicker, setMsgPicker] = useState(null)
 
   const isAdmin = user?.role === 'admin'
 
@@ -410,7 +411,17 @@ export default function App() {
 
     // Funcionario disparo view
     const pessoa = usuarios.find(u => u.id === dispPessoa)
-    if (!pessoa) { setDispPessoa(null); return null }
+    if (!pessoa) {
+      return (
+        <div style={css.wrap}>
+          <div style={css.header}>
+            <button onClick={() => setDispPessoa(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}><I d={ic.left} color={T.dim} /></button>
+            <div style={css.title}>Carregando...</div>
+          </div>
+          <div style={css.body}><div style={{ textAlign: 'center', color: T.dim, padding: 30 }}>Carregando dados...</div></div>
+        </div>
+      )
+    }
     const minhasListas = listas.filter(l => l.usuario_id === pessoa.id && l.data === today())
     const meusNumeros = numeros.filter(n => minhasListas.some(l => l.id === n.lista_id))
     const pendentes = meusNumeros.filter(n => !n.enviado)
@@ -421,8 +432,6 @@ export default function App() {
     // Historico
     const histDates = [...new Set(listas.filter(l => l.usuario_id === pessoa.id).map(l => l.data))].sort((a, b) => b.localeCompare(a))
 
-    const [selectedNum, setSelectedNum] = useState(null) // {numero, id} for message picker
-
     const openWhatsApp = (numero, numId, mensagem) => {
       const fullNum = numero.startsWith('55') ? numero : '55' + numero
       const encoded = encodeURIComponent(mensagem)
@@ -430,7 +439,7 @@ export default function App() {
       setCopiedId(numId)
       setTimeout(() => setCopiedId(null), 1500)
       marcarEnviado(numId)
-      setSelectedNum(null)
+      setMsgPicker(null)
     }
 
     return (
@@ -477,7 +486,7 @@ export default function App() {
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 11, color: T.dim, textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 500, marginBottom: 8 }}>A enviar ({pendentes.length})</div>
               {pendentes.map(n => (
-                <button key={n.id} onClick={() => setSelectedNum({ numero: n.numero, id: n.id })}
+                <button key={n.id} onClick={() => setMsgPicker({ numero: n.numero, id: n.id })}
                   style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', marginBottom: 4, borderRadius: T.r, background: copiedId === n.id ? T.greenGlow : T.s1, border: `1px solid ${copiedId === n.id ? T.green : T.border}`, cursor: 'pointer', fontFamily: T.font, color: T.text, textAlign: 'left' }}>
                   <WaIcon />
                   <div style={{ flex: 1 }}><div style={{ fontFamily: T.mono, fontSize: 16, fontWeight: 600 }}>{formatPhone(n.numero)}</div></div>
@@ -488,19 +497,19 @@ export default function App() {
           )}
 
           {/* MESSAGE PICKER MODAL */}
-          {selectedNum && (
-            <div style={css.overlay} onClick={() => setSelectedNum(null)}>
+          {msgPicker && (
+            <div style={css.overlay} onClick={() => setMsgPicker(null)}>
               <div style={{ ...css.modal, maxWidth: 380 }} onClick={e => e.stopPropagation()}>
                 <div style={css.modalH}>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700 }}>Escolha a mensagem</div>
-                    <div style={{ fontSize: 12, color: T.dim, fontFamily: T.mono, marginTop: 2 }}>{formatPhone(selectedNum.numero)}</div>
+                    <div style={{ fontSize: 12, color: T.dim, fontFamily: T.mono, marginTop: 2 }}>{formatPhone(msgPicker.numero)}</div>
                   </div>
-                  <button onClick={() => setSelectedNum(null)} style={{ background: 'none', border: 'none', color: T.dim, cursor: 'pointer' }}><I d={ic.close} /></button>
+                  <button onClick={() => setMsgPicker(null)} style={{ background: 'none', border: 'none', color: T.dim, cursor: 'pointer' }}><I d={ic.close} /></button>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {MENSAGENS.map(msg => (
-                    <button key={msg.id} onClick={() => openWhatsApp(selectedNum.numero, selectedNum.id, msg.texto)}
+                    <button key={msg.id} onClick={() => openWhatsApp(msgPicker.numero, msgPicker.id, msg.texto)}
                       style={{ width: '100%', textAlign: 'left', padding: '12px 14px', borderRadius: T.r, background: T.s2, border: `1px solid ${msg.color}33`, cursor: 'pointer', fontFamily: T.font, color: T.text, transition: 'all .15s' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                         <div style={{ width: 8, height: 8, borderRadius: '50%', background: msg.color, flexShrink: 0 }} />
