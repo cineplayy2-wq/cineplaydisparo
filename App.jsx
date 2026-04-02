@@ -286,7 +286,12 @@ export default function App() {
   }
 
   const addLista = async (uid, numerosStr) => {
-    const nums = numerosStr.split(/[\n,;]+/).map(n => n.replace(/\D/g, '').trim()).filter(n => n.length >= 8)
+    const nums = numerosStr.split(/[\n,;]+/).map(n => {
+      let clean = n.replace(/\D/g, '').trim()
+      if (clean.length === 13 && clean.startsWith('55')) clean = clean.slice(2)
+      if (clean.length === 12 && clean.startsWith('55')) clean = clean.slice(2)
+      return clean
+    }).filter(n => n.length >= 10 && n.length <= 11)
     if (nums.length === 0) return
     const { data: lista } = await supabase.from('listas').insert({ usuario_id: uid, data: today() }).select().single()
     if (lista) {
@@ -433,7 +438,7 @@ export default function App() {
     const histDates = [...new Set(listas.filter(l => l.usuario_id === pessoa.id).map(l => l.data))].sort((a, b) => b.localeCompare(a))
 
     const openWhatsApp = (numero, numId, mensagem) => {
-      const fullNum = numero.startsWith('55') ? numero : '55' + numero
+      const fullNum = '55' + numero
       const encoded = encodeURIComponent(mensagem)
       window.open(`https://wa.me/${fullNum}?text=${encoded}`, '_blank')
       setCopiedId(numId)
@@ -496,34 +501,7 @@ export default function App() {
             </div>
           )}
 
-          {/* MESSAGE PICKER MODAL */}
-          {msgPicker && (
-            <div style={css.overlay} onClick={() => setMsgPicker(null)}>
-              <div style={{ ...css.modal, maxWidth: 380 }} onClick={e => e.stopPropagation()}>
-                <div style={css.modalH}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700 }}>Escolha a mensagem</div>
-                    <div style={{ fontSize: 12, color: T.dim, fontFamily: T.mono, marginTop: 2 }}>{formatPhone(msgPicker.numero)}</div>
-                  </div>
-                  <button onClick={() => setMsgPicker(null)} style={{ background: 'none', border: 'none', color: T.dim, cursor: 'pointer' }}><I d={ic.close} /></button>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {MENSAGENS.map(msg => (
-                    <button key={msg.id} onClick={() => openWhatsApp(msgPicker.numero, msgPicker.id, msg.texto)}
-                      style={{ width: '100%', textAlign: 'left', padding: '12px 14px', borderRadius: T.r, background: T.s2, border: `1px solid ${msg.color}33`, cursor: 'pointer', fontFamily: T.font, color: T.text, transition: 'all .15s' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: msg.color, flexShrink: 0 }} />
-                        <span style={{ fontSize: 13, fontWeight: 600, color: msg.color }}>{msg.label}</span>
-                      </div>
-                      <div style={{ fontSize: 11, color: T.dim, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                        {msg.texto.replace(/\n/g, ' ')}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
+          {/* MESSAGE PICKER MODAL - moved to render below */}
 
           {/* SENT today */}
           {enviados.length > 0 && (
@@ -683,7 +661,7 @@ export default function App() {
               <button style={css.btn('primary')} onClick={async () => { await addLista(pessoa.id, newNumbers); setNewNumbers(''); setAddingList(false) }}><I d={ic.check} color="#fff" />Adicionar</button>
               <button style={css.btn('ghost')} onClick={() => { setAddingList(false); setNewNumbers('') }}>Cancelar</button>
             </div>
-            {newNumbers.trim() && <div style={{ fontSize: 11, color: T.dim, marginTop: 6 }}>{newNumbers.split(/[\n,;]+/).map(n => n.replace(/\D/g, '').trim()).filter(n => n.length >= 8).length} números válidos</div>}
+            {newNumbers.trim() && <div style={{ fontSize: 11, color: T.dim, marginTop: 6 }}>{newNumbers.split(/[\n,;]+/).map(n => { let c = n.replace(/\D/g, '').trim(); if (c.length >= 12 && c.startsWith('55')) c = c.slice(2); return c; }).filter(n => n.length >= 10 && n.length <= 11).length} números válidos</div>}
           </div>
         )}
 
