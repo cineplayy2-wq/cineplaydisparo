@@ -521,6 +521,30 @@ export default function App() {
           {/* Historico (funcionário) */}
           <HistoricoSection pessoaId={pessoa.id} listas={listas} numeros={numeros} />
         </div>
+        {/* MESSAGE PICKER - bottom sheet */}
+        {msgPicker && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.75)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 9999 }} onClick={() => setMsgPicker(null)}>
+            <div style={{ background: T.s1, borderRadius: "16px 16px 0 0", padding: 20, width: "100%", maxWidth: 420, maxHeight: "80vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
+              <div style={{ width: 40, height: 4, borderRadius: 2, background: T.border, margin: "0 auto 14px" }} />
+              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Escolha a mensagem</div>
+              <div style={{ fontSize: 13, color: T.dim, fontFamily: T.mono, marginBottom: 14 }}>{formatPhone(msgPicker.numero)}</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {MENSAGENS.map(msg => (
+                  <button key={msg.id} onClick={() => openWhatsApp(msgPicker.numero, msgPicker.id, msg.texto)}
+                    style={{ width: "100%", textAlign: "left", padding: "14px 16px", borderRadius: T.r, background: T.s2, border: `2px solid ${msg.color}33`, cursor: "pointer", fontFamily: T.font, color: T.text }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: "50%", background: msg.color, flexShrink: 0 }} />
+                      <span style={{ fontSize: 14, fontWeight: 600, color: msg.color }}>{msg.label}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: T.dim, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                      {msg.texto.replace(/\n/g, " ")}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
