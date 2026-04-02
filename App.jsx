@@ -754,7 +754,7 @@ export default function App() {
         {tab === 'registro' && <RegistroTab weekDates={weekDates} shiftWeek={shiftWeek} pessoasAtivas={pessoasAtivas} getRegistro={getRegistro} toggleRegistro={toggleRegistro} getDayLabel={getDayLabel} />}
         {tab === 'dashboard' && <DashboardTab dashStats={dashStats} />}
         {tab === 'equipe' && <EquipeTab pessoasFiltradas={pessoasFiltradas} getStats={getStats} setModal={setModal} />}
-        {tab === 'pagamentos' && <PagamentosTab pagamentos={pagamentos} usuarios={usuarios} filterPessoa={filterPessoa} pessoasAtivas={pessoasAtivas} setModal={setModal} />}
+        {tab === 'pagamentos' && <PagamentosTab pagamentos={pagamentos} usuarios={usuarios} filterPessoa={filterPessoa} pessoasAtivas={pessoasAtivas} setModal={setModal} getStats={getStats} />}
         {tab === 'ranking' && <RankingTab pessoasAtivas={pessoasAtivas} getStats={getStats} />}
       </div>
 
@@ -886,12 +886,43 @@ function EquipeTab({ pessoasFiltradas, getStats, setModal }) {
   )
 }
 
-function PagamentosTab({ pagamentos, usuarios, filterPessoa, pessoasAtivas, setModal }) {
+function PagamentosTab({ pagamentos, usuarios, filterPessoa, pessoasAtivas, setModal, getStats }) {
   const list = pagamentos.map(pg => ({ ...pg, pessoa: usuarios.find(u => u.id === pg.usuario_id) })).filter(pg => pg.pessoa && (filterPessoa === 'todos' || pg.usuario_id === filterPessoa)).sort((a, b) => b.data.localeCompare(a.data))
   const total = list.reduce((s, pg) => s + Number(pg.valor), 0)
+  const pendentes = pessoasAtivas.map(p => ({ ...p, stats: getStats(p.id) })).filter(p => p.stats.saldo > 0).sort((a, b) => b.stats.saldo - a.stats.saldo)
+  const totalPendente = pendentes.reduce((s, p) => s + p.stats.saldo, 0)
   return (
     <div>
-      <div style={css.cardH}><I d={ic.pay} color={T.green} />Pagamentos ({list.length})</div>
+      {/* PAGAMENTOS PENDENTES */}
+      {pendentes.length > 0 && (
+        <div style={{ ...css.card, border: `1px solid ${T.amber}25` }}>
+          <div style={{ ...css.cardH, marginBottom: 10 }}><I d={ic.warn} color={T.amber} />Pagamentos Pendentes</div>
+          {pendentes.map(p => (
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: `1px solid ${T.border}15` }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 500, fontSize: 13 }}>{p.nome}</div>
+                <div style={{ fontSize: 10, color: T.dim }}>{p.stats.diasTrabalhados} dias trabalhados</div>
+              </div>
+              <div style={{ fontFamily: T.mono, fontSize: 14, fontWeight: 700, color: T.amber, marginRight: 8 }}>{formatCurrency(p.stats.saldo)}</div>
+              <button style={css.btn('success')} onClick={() => setModal({ type: 'pagamento', pessoa: p })}><I d={ic.pay} size={13} color={T.green} />Pagar</button>
+            </div>
+          ))}
+          <div style={{ marginTop: 10, padding: 10, background: T.amberGlow, borderRadius: T.r, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, fontWeight: 600 }}>Total Pendente</span>
+            <span style={{ fontFamily: T.mono, fontWeight: 700, color: T.amber, fontSize: 16 }}>{formatCurrency(totalPendente)}</span>
+          </div>
+        </div>
+      )}
+      {pendentes.length === 0 && (
+        <div style={{ ...css.card, textAlign: 'center', border: `1px solid ${T.green}25`, padding: 20 }}>
+          <div style={{ fontSize: 24, marginBottom: 6 }}>✅</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: T.green }}>Nenhum pagamento pendente!</div>
+          <div style={{ fontSize: 11, color: T.dim, marginTop: 2 }}>Todos os funcionários estão em dia.</div>
+        </div>
+      )}
+
+      {/* HISTORICO */}
+      <div style={css.cardH}><I d={ic.pay} color={T.green} />Histórico ({list.length})</div>
       {list.length === 0 ? <div style={{ ...css.card, textAlign: 'center', color: T.dim }}>Nenhum.</div> : <>
         <div style={{ overflowX: 'auto' }}><table style={css.table}><thead><tr><th style={css.th}>Data</th><th style={css.th}>Pessoa</th><th style={css.th}>Valor</th></tr></thead>
           <tbody>{list.map(pg => <tr key={pg.id}><td style={{ ...css.td, fontFamily: T.mono }}>{formatDate(pg.data)}</td><td style={{ ...css.td, fontWeight: 500 }}>{pg.pessoa?.nome}</td><td style={{ ...css.td, fontFamily: T.mono, color: T.green, fontWeight: 600 }}>{formatCurrency(pg.valor)}</td></tr>)}</tbody>
