@@ -164,6 +164,13 @@ export default function App() {
   const [addingList, setAddingList] = useState(false)
   const [newNumbers, setNewNumbers] = useState('')
   const [msgPicker, setMsgPicker] = useState(null)
+  const [bloqueios, setBloqueios] = useState([])
+  const [sessoes, setSessoes] = useState([])
+  const [timerRunning, setTimerRunning] = useState(false)
+  const [timerStart, setTimerStart] = useState(null)
+  const [timerElapsed, setTimerElapsed] = useState(0)
+  const [activeSessaoId, setActiveSessaoId] = useState(null)
+  const [showBloqueioMenu, setShowBloqueioMenu] = useState(false)
 
   const isAdmin = user?.role === 'admin'
 
@@ -179,18 +186,22 @@ export default function App() {
   // ─── Load all data when logged in ───
   const loadData = useCallback(async () => {
     if (!user) return
-    const [u, r, p, l, n] = await Promise.all([
+    const [u, r, p, l, n, b, s] = await Promise.all([
       supabase.from('usuarios').select('*').order('nome'),
       supabase.from('registros').select('*'),
       supabase.from('pagamentos').select('*'),
       supabase.from('listas').select('*'),
       supabase.from('numeros').select('*'),
+      supabase.from('bloqueios').select('*').order('created_at', { ascending: false }),
+      supabase.from('sessoes_tempo').select('*').order('created_at', { ascending: false }),
     ])
     if (u.data) setUsuarios(u.data)
     if (r.data) setRegistros(r.data)
     if (p.data) setPagamentos(p.data)
     if (l.data) setListas(l.data)
     if (n.data) setNumeros(n.data)
+    if (b.data) setBloqueios(b.data)
+    if (s.data) setSessoes(s.data)
   }, [user])
 
   useEffect(() => { loadData() }, [loadData])
@@ -308,6 +319,63 @@ export default function App() {
   const desmarcarEnviado = async (numId) => {
     await supabase.from('numeros').update({ enviado: false, enviado_at: null }).eq('id', numId)
     await loadData()
+  }
+
+  // ─── Bloqueio actions ───
+  const reportarBloqueio = async (pessoaId, tipo) => {
+    const pessoa = usuarios.find(u => u.id === pessoaId)
+    const agora = new Date()
+    const hora = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    await supabase.from('bloqueios').insert({ usuario_id: pessoaId, tipo, data: today(), hora })
+    // Send WhatsApp notification
+    const msg = `⚠️ Bloqueio detectado - ${pessoa?.nome || 'Funcionário'} - ${tipo === '24h' ? 'Bloqueio de 24 horas' : 'Bloqueio permanente'} - ${formatDate(today())} ${hora}`
+    const encoded = encodeURIComponent(msg)
+    window.open(`https://wa.me/5553984434391?text=${encoded}`, '_blank')
+    await loadData()
+    setShowBloqueioMenu(false)
+  }
+
+  // ─── Timer actions ───
+  const startTimer = async (pessoaId) => {
+    const now = new Date().toISOString()
+    const { data: sess } = await supabase.from('sessoes_tempo').insert({ usuario_id: pessoaId, data: today(), inicio: now }).select().single()
+    if (sess) setActiveSessaoId(sess.id)
+    setTimerRunning(true)
+    setTimerStart(Date.now())
+  }
+
+  const pauseTimer = async () => {
+    if (!activeSessaoId) return
+    const elapsed = Math.round((Date.now() - timerStart) / 1000)
+    await supabase.from('sessoes_tempo').update({ fim: new Date().toISOString(), segundos: elapsed }).eq('id', activeSessaoId)
+    setTimerRunning(false)
+    setTimerElapsed(prev => prev + elapsed)
+    setTimerStart(null)
+    setActiveSessaoId(null)
+    await loadData()
+  }
+
+  // Timer tick
+  useEffect(() => {
+    if (!timerRunning) return
+    const interval = setInterval(() => {}, 1000) // force re-render
+    return () => clearInterval(interval)
+  }, [timerRunning])
+
+  const getTimerDisplay = () => {
+    const current = timerRunning && timerStart ? Math.round((Date.now() - timerStart) / 1000) : 0
+    const total = timerElapsed + current
+    const h = Math.floor(total / 3600)
+    const m = Math.floor((total % 3600) / 60)
+    const s = total % 60
+    return `${h > 0 ? h + 'h ' : ''}${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  }
+
+  const getTotalTempoHoje = (pessoaId) => {
+    const total = sessoes.filter(s => s.usuario_id === pessoaId && s.data === today()).reduce((sum, s) => sum + (s.segundos || 0), 0)
+    const h = Math.floor(total / 3600)
+    const m = Math.floor((total % 3600) / 60)
+    return total > 0 ? `${h > 0 ? h + 'h ' : ''}${m}min` : null
   }
 
   // ─── Week ───
@@ -455,6 +523,24 @@ export default function App() {
           <button onClick={handleLogout} style={css.btn('ghost')}><I d={ic.logout} size={14} color={T.dim} />Sair</button>
         </div>
         <div style={css.body}>
+          {/* TIMER CONTROLS */}
+          {totalNums > 0 && !allDone && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, padding: '10px 14px', background: T.s1, borderRadius: T.r, border: `1px solid ${timerRunning ? T.green + '44' : T.border}` }}>
+              {!timerRunning ? (
+                <button onClick={() => startTimer(pessoa.id)} style={{ ...css.btn('success'), padding: '8px 16px' }}>▶ Play</button>
+              ) : (
+                <button onClick={pauseTimer} style={{ ...css.btn('ghost'), padding: '8px 16px', border: `1px solid ${T.amber}44`, color: T.amber }}>⏸ Pause</button>
+              )}
+              <div style={{ flex: 1, textAlign: 'center' }}>
+                <div style={{ fontFamily: T.mono, fontSize: 20, fontWeight: 700, color: timerRunning ? T.green : T.dim }}>{getTimerDisplay()}</div>
+              </div>
+              {timerRunning && <div style={{ width: 8, height: 8, borderRadius: '50%', background: T.green, animation: 'pulse 1.5s infinite' }} />}
+            </div>
+          )}
+          {getTotalTempoHoje(pessoa.id) && !timerRunning && (
+            <div style={{ fontSize: 11, color: T.dim, marginBottom: 8, textAlign: 'center' }}>Tempo total hoje: {getTotalTempoHoje(pessoa.id)}</div>
+          )}
+
           {/* Progress */}
           {totalNums > 0 && (
             <div style={{ marginBottom: 16 }}>
@@ -474,6 +560,7 @@ export default function App() {
               <div style={{ fontSize: 40, marginBottom: 8 }}>🎉</div>
               <div style={{ fontWeight: 700, fontSize: 16, color: T.green, marginBottom: 4 }}>Lista concluída!</div>
               <div style={{ fontSize: 12, color: T.dim }}>Todos os {totalNums} números enviados. Dia marcado!</div>
+              {getTotalTempoHoje(pessoa.id) && <div style={{ fontSize: 11, color: T.dim, marginTop: 6 }}>Tempo total: {getTotalTempoHoje(pessoa.id)}</div>}
             </div>
           )}
 
@@ -483,6 +570,28 @@ export default function App() {
               <div style={{ fontSize: 40, marginBottom: 8 }}>📋</div>
               <div style={{ fontWeight: 600, fontSize: 14 }}>Sem lista pra hoje</div>
               <div style={{ fontSize: 12, color: T.dim, marginTop: 4 }}>Aguarde o gestor adicionar sua lista.</div>
+            </div>
+          )}
+
+          {/* BLOQUEIO BUTTON */}
+          {totalNums > 0 && !allDone && (
+            <div style={{ marginBottom: 12 }}>
+              <button onClick={() => setShowBloqueioMenu(!showBloqueioMenu)}
+                style={{ width: '100%', padding: '10px 14px', borderRadius: T.r, background: T.redGlow, border: `1px solid ${T.red}33`, cursor: 'pointer', fontFamily: T.font, fontSize: 12, fontWeight: 500, color: T.red, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                🚫 Reportar Bloqueio
+              </button>
+              {showBloqueioMenu && (
+                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                  <button onClick={() => reportarBloqueio(pessoa.id, '24h')}
+                    style={{ ...css.btn('ghost'), flex: 1, justifyContent: 'center', border: `1px solid ${T.amber}44`, color: T.amber, fontSize: 11 }}>
+                    ⏰ Bloqueio 24h
+                  </button>
+                  <button onClick={() => reportarBloqueio(pessoa.id, 'permanente')}
+                    style={{ ...css.btn('ghost'), flex: 1, justifyContent: 'center', border: `1px solid ${T.red}44`, color: T.red, fontSize: 11 }}>
+                    🔒 Permanente
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -520,6 +629,7 @@ export default function App() {
 
           {/* Historico (funcionário) */}
           <HistoricoSection pessoaId={pessoa.id} listas={listas} numeros={numeros} />
+          <GanhosMensais pessoaId={pessoa.id} registros={registros} pagamentos={pagamentos} usuarios={usuarios} />
         </div>
         {/* MESSAGE PICKER - bottom sheet */}
         {msgPicker && (
@@ -718,6 +828,9 @@ export default function App() {
         {!addingList && totalNums > 0 && !allDone && <button style={{ ...css.btn('ghost'), width: '100%', justifyContent: 'center', marginTop: 8 }} onClick={() => setAddingList(true)}><I d={ic.add} color={T.dim} />Mais números</button>}
 
         <HistoricoSection pessoaId={pessoa.id} listas={listas} numeros={numeros} />
+        <BloqueioHistorico pessoaId={pessoa.id} bloqueios={bloqueios} />
+        <TempoHistorico pessoaId={pessoa.id} sessoes={sessoes} />
+        <GanhosMensais pessoaId={pessoa.id} registros={registros} pagamentos={pagamentos} usuarios={usuarios} />
       </div>
     )
   }
@@ -949,6 +1062,139 @@ function RankingTab({ pessoasAtivas, getStats }) {
         <div style={{ flex: 1 }}><div style={{ fontWeight: 600, fontSize: 13, marginBottom: 5 }}>{p.nome}</div><div style={{ height: 5, borderRadius: 3, background: T.s2, overflow: 'hidden' }}><div style={{ height: '100%', width: `${((sortBy === 'dias' ? p.stats.diasTrabalhados : p.stats.totalReceber) / max) * 100}%`, borderRadius: 3, background: `linear-gradient(90deg, ${T.blue}, ${T.purple})` }} /></div></div>
         <div style={{ fontFamily: T.mono, fontSize: 15, fontWeight: 700, color: T.blue }}>{sortBy === 'dias' ? `${p.stats.diasTrabalhados}d` : formatCurrency(p.stats.totalReceber)}</div>
       </div>)}
+    </div>
+  )
+}
+
+function GanhosMensais({ pessoaId, registros, pagamentos, usuarios }) {
+  const [showGanhos, setShowGanhos] = useState(false)
+  const pessoa = usuarios.find(u => u.id === pessoaId)
+  const valorDia = pessoa?.valor_dia || 15
+
+  // Group by month
+  const meses = useMemo(() => {
+    const map = {}
+    // Count days worked per month
+    registros.filter(r => r.usuario_id === pessoaId && r.concluiu).forEach(r => {
+      const mes = r.data.slice(0, 7) // "2026-04"
+      if (!map[mes]) map[mes] = { dias: 0, ganho: 0, pago: 0 }
+      map[mes].dias++
+      map[mes].ganho += Number(valorDia)
+    })
+    // Sum payments per month
+    pagamentos.filter(p => p.usuario_id === pessoaId).forEach(p => {
+      const mes = p.data.slice(0, 7)
+      if (!map[mes]) map[mes] = { dias: 0, ganho: 0, pago: 0 }
+      map[mes].pago += Number(p.valor)
+    })
+    return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0])).map(([mes, data]) => ({ mes, ...data }))
+  }, [registros, pagamentos, pessoaId, valorDia])
+
+  const mesesNomes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+  const formatMes = (m) => {
+    const [y, mo] = m.split('-')
+    return `${mesesNomes[Number(mo) - 1]} ${y}`
+  }
+
+  return (
+    <div style={{ marginTop: 16, borderTop: `1px solid ${T.border}`, paddingTop: 14 }}>
+      <button onClick={() => setShowGanhos(!showGanhos)}
+        style={{ width: '100%', background: 'none', border: 'none', padding: '8px 0', cursor: 'pointer', fontFamily: T.font, color: T.text, display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
+        <I d={showGanhos ? ic.up : ic.down} size={16} color={T.dim} />
+        Ganhos por Mês ({meses.length})
+      </button>
+      {showGanhos && (
+        <div style={{ marginTop: 8 }}>
+          {meses.length === 0 ? (
+            <div style={{ fontSize: 12, color: T.dim, padding: 8 }}>Nenhum registro ainda.</div>
+          ) : meses.map(m => (
+            <div key={m.mes} style={{ background: T.s1, border: `1px solid ${T.border}`, borderRadius: T.r, padding: 14, marginBottom: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>{formatMes(m.mes)}</span>
+                <span style={{ fontSize: 11, color: T.dim }}>{m.dias} dias</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                <div style={{ background: T.blueGlow, borderRadius: T.r, padding: '8px 10px' }}>
+                  <div style={{ fontSize: 9, color: T.dim, textTransform: 'uppercase', marginBottom: 2 }}>Ganhou</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, fontFamily: T.mono, color: T.blue }}>{formatCurrency(m.ganho)}</div>
+                </div>
+                <div style={{ background: T.greenGlow, borderRadius: T.r, padding: '8px 10px' }}>
+                  <div style={{ fontSize: 9, color: T.dim, textTransform: 'uppercase', marginBottom: 2 }}>Recebeu</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, fontFamily: T.mono, color: T.green }}>{formatCurrency(m.pago)}</div>
+                </div>
+                <div style={{ background: m.ganho - m.pago > 0 ? T.amberGlow : T.greenGlow, borderRadius: T.r, padding: '8px 10px' }}>
+                  <div style={{ fontSize: 9, color: T.dim, textTransform: 'uppercase', marginBottom: 2 }}>Saldo</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, fontFamily: T.mono, color: m.ganho - m.pago > 0 ? T.amber : T.green }}>{formatCurrency(m.ganho - m.pago)}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BloqueioHistorico({ pessoaId, bloqueios }) {
+  const [show, setShow] = useState(false)
+  const meus = bloqueios.filter(b => b.usuario_id === pessoaId)
+  if (meus.length === 0) return null
+  return (
+    <div style={{ marginTop: 16, borderTop: `1px solid ${T.border}`, paddingTop: 14 }}>
+      <button onClick={() => setShow(!show)}
+        style={{ width: '100%', background: 'none', border: 'none', padding: '8px 0', cursor: 'pointer', fontFamily: T.font, color: T.text, display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
+        <I d={show ? ic.up : ic.down} size={16} color={T.red} />
+        🚫 Bloqueios ({meus.length})
+      </button>
+      {show && (
+        <div style={{ marginTop: 8 }}>
+          {meus.map(b => (
+            <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginBottom: 4, borderRadius: T.r, background: T.s1, border: `1px solid ${b.tipo === 'permanente' ? T.red : T.amber}25` }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: b.tipo === 'permanente' ? T.red : T.amber, flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: 500 }}>{b.tipo === '24h' ? 'Bloqueio 24h' : 'Bloqueio Permanente'}</div>
+                <div style={{ fontSize: 10, color: T.dim }}>{formatDate(b.data)} às {b.hora}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TempoHistorico({ pessoaId, sessoes }) {
+  const [show, setShow] = useState(false)
+  const meus = sessoes.filter(s => s.usuario_id === pessoaId && s.segundos > 0)
+  const porDia = {}
+  meus.forEach(s => {
+    if (!porDia[s.data]) porDia[s.data] = 0
+    porDia[s.data] += s.segundos || 0
+  })
+  const dias = Object.entries(porDia).sort((a, b) => b[0].localeCompare(a[0]))
+  if (dias.length === 0) return null
+  const fmtTempo = (sec) => {
+    const h = Math.floor(sec / 3600)
+    const m = Math.floor((sec % 3600) / 60)
+    return `${h > 0 ? h + 'h ' : ''}${m}min`
+  }
+  return (
+    <div style={{ marginTop: 16, borderTop: `1px solid ${T.border}`, paddingTop: 14 }}>
+      <button onClick={() => setShow(!show)}
+        style={{ width: '100%', background: 'none', border: 'none', padding: '8px 0', cursor: 'pointer', fontFamily: T.font, color: T.text, display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
+        <I d={show ? ic.up : ic.down} size={16} color={T.blue} />
+        ⏱ Tempo de Trabalho ({dias.length} dias)
+      </button>
+      {show && (
+        <div style={{ marginTop: 8 }}>
+          {dias.map(([data, seg]) => (
+            <div key={data} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', marginBottom: 4, borderRadius: T.r, background: T.s1, border: `1px solid ${T.border}` }}>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>{formatDate(data)}</span>
+              <span style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 600, color: T.blue }}>{fmtTempo(seg)}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
