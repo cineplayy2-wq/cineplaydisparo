@@ -327,15 +327,19 @@ export default function App() {
     const agora = new Date()
     const hora = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     await supabase.from('bloqueios').insert({ usuario_id: pessoaId, tipo, data: today(), hora })
-    // Send WhatsApp notification
-    const msg = `⚠️ Bloqueio detectado - ${pessoa?.nome || 'Funcionário'} - ${tipo === '24h' ? 'Bloqueio de 24 horas' : 'Bloqueio permanente'} - ${formatDate(today())} ${hora}`
-    const encoded = encodeURIComponent(msg)
-    window.open(`https://wa.me/5553984434391?text=${encoded}`, '_blank')
     await loadData()
     setShowBloqueioMenu(false)
+    // Send WhatsApp notification via link (delay to let state update)
+    const msg = `⚠️ Bloqueio detectado - ${pessoa?.nome || 'Funcionário'} - ${tipo === '24h' ? 'Bloqueio de 24 horas' : 'Bloqueio permanente'} - ${formatDate(today())} ${hora}`
+    const encoded = encodeURIComponent(msg)
+    setTimeout(() => {
+      window.location.href = `https://wa.me/5553984434391?text=${encoded}`
+    }, 300)
   }
 
   // ─── Timer actions ───
+  const [timerTick, setTimerTick] = useState(0)
+
   const startTimer = async (pessoaId) => {
     const now = new Date().toISOString()
     const { data: sess } = await supabase.from('sessoes_tempo').insert({ usuario_id: pessoaId, data: today(), inicio: now }).select().single()
@@ -355,14 +359,15 @@ export default function App() {
     await loadData()
   }
 
-  // Timer tick
+  // Timer tick - proper re-render every second
   useEffect(() => {
     if (!timerRunning) return
-    const interval = setInterval(() => {}, 1000) // force re-render
+    const interval = setInterval(() => setTimerTick(t => t + 1), 1000)
     return () => clearInterval(interval)
   }, [timerRunning])
 
   const getTimerDisplay = () => {
+    const _ = timerTick // force dependency
     const current = timerRunning && timerStart ? Math.round((Date.now() - timerStart) / 1000) : 0
     const total = timerElapsed + current
     const h = Math.floor(total / 3600)
@@ -525,16 +530,21 @@ export default function App() {
         <div style={css.body}>
           {/* TIMER CONTROLS */}
           {totalNums > 0 && !allDone && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, padding: '10px 14px', background: T.s1, borderRadius: T.r, border: `1px solid ${timerRunning ? T.green + '44' : T.border}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, padding: '12px 16px', background: timerRunning ? 'linear-gradient(135deg, rgba(52,211,153,.08), rgba(79,143,247,.08))' : T.s1, borderRadius: T.r2, border: `1px solid ${timerRunning ? T.green + '33' : T.border}` }}>
               {!timerRunning ? (
-                <button onClick={() => startTimer(pessoa.id)} style={{ ...css.btn('success'), padding: '8px 16px' }}>▶ Play</button>
+                <button onClick={() => startTimer(pessoa.id)} style={{ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg, #22c55e, #16a34a)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(34,197,94,.35)', flexShrink: 0 }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
+                </button>
               ) : (
-                <button onClick={pauseTimer} style={{ ...css.btn('ghost'), padding: '8px 16px', border: `1px solid ${T.amber}44`, color: T.amber }}>⏸ Pause</button>
+                <button onClick={pauseTimer} style={{ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg, #f59e0b, #d97706)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(245,158,11,.35)', flexShrink: 0 }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                </button>
               )}
               <div style={{ flex: 1, textAlign: 'center' }}>
-                <div style={{ fontFamily: T.mono, fontSize: 20, fontWeight: 700, color: timerRunning ? T.green : T.dim }}>{getTimerDisplay()}</div>
+                <div style={{ fontFamily: T.mono, fontSize: 26, fontWeight: 700, color: timerRunning ? T.green : T.dim, letterSpacing: '0.05em' }}>{getTimerDisplay()}</div>
+                <div style={{ fontSize: 10, color: T.dim, marginTop: 2 }}>{timerRunning ? 'Trabalhando...' : 'Aperte play pra iniciar'}</div>
               </div>
-              {timerRunning && <div style={{ width: 8, height: 8, borderRadius: '50%', background: T.green, animation: 'pulse 1.5s infinite' }} />}
+              {timerRunning && <div style={{ width: 10, height: 10, borderRadius: '50%', background: T.green, boxShadow: `0 0 8px ${T.green}`, animation: 'pulse 1.5s infinite' }} />}
             </div>
           )}
           {getTotalTempoHoje(pessoa.id) && !timerRunning && (
