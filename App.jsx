@@ -875,7 +875,7 @@ export default function App() {
 
         {tab === 'disparos' && <DisparosTab />}
         {tab === 'registro' && <RegistroTab weekDates={weekDates} shiftWeek={shiftWeek} pessoasAtivas={pessoasAtivas} getRegistro={getRegistro} toggleRegistro={toggleRegistro} getDayLabel={getDayLabel} />}
-        {tab === 'dashboard' && <DashboardTab dashStats={dashStats} />}
+        {tab === 'dashboard' && <DashboardTab dashStats={dashStats} sessoes={sessoes} pessoasAtivas={pessoasAtivas} />}
         {tab === 'equipe' && <EquipeTab pessoasFiltradas={pessoasFiltradas} getStats={getStats} setModal={setModal} />}
         {tab === 'pagamentos' && <PagamentosTab pagamentos={pagamentos} usuarios={usuarios} filterPessoa={filterPessoa} pessoasAtivas={pessoasAtivas} setModal={setModal} getStats={getStats} />}
         {tab === 'ranking' && <RankingTab pessoasAtivas={pessoasAtivas} getStats={getStats} />}
@@ -970,7 +970,42 @@ function RegistroTab({ weekDates, shiftWeek, pessoasAtivas, getRegistro, toggleR
   )
 }
 
-function DashboardTab({ dashStats }) {
+function DashboardTab({ dashStats, sessoes, pessoasAtivas }) {
+  const fmtTempo = (sec) => {
+    if (!sec || sec <= 0) return '—'
+    const h = Math.floor(sec / 3600)
+    const m = Math.floor((sec % 3600) / 60)
+    return `${h > 0 ? h + 'h ' : ''}${m}min`
+  }
+
+  // Calc tempo stats per person
+  const tempoStats = useMemo(() => {
+    if (!sessoes || sessoes.length === 0) return []
+    const todayStr = today()
+    const weekRange = getWeekRange(todayStr)
+    const monthRange = getMonthRange(todayStr)
+
+    return pessoasAtivas.map(p => {
+      const mySess = sessoes.filter(s => s.usuario_id === p.id && s.segundos > 0)
+      const hoje = mySess.filter(s => s.data === todayStr).reduce((sum, s) => sum + (s.segundos || 0), 0)
+      const semana = mySess.filter(s => s.data >= weekRange.start && s.data <= weekRange.end)
+      const mes = mySess.filter(s => s.data >= monthRange.start && s.data <= monthRange.end)
+
+      const diasSemana = [...new Set(semana.map(s => s.data))].length
+      const diasMes = [...new Set(mes.map(s => s.data))].length
+      const totalSemana = semana.reduce((sum, s) => sum + (s.segundos || 0), 0)
+      const totalMes = mes.reduce((sum, s) => sum + (s.segundos || 0), 0)
+
+      return {
+        ...p,
+        hoje,
+        mediaSemana: diasSemana > 0 ? Math.round(totalSemana / diasSemana) : 0,
+        mediaMes: diasMes > 0 ? Math.round(totalMes / diasMes) : 0,
+        totalMes,
+      }
+    }).sort((a, b) => b.hoje - a.hoje)
+  }, [sessoes, pessoasAtivas])
+
   return (
     <div>
       <div style={css.grid}>
@@ -979,6 +1014,34 @@ function DashboardTab({ dashStats }) {
         <div style={css.stat(T.amber, T.amberGlow)}><div style={css.statL}>Alertas</div><div style={css.statV(T.amber)}>{dashStats.alertas.length}</div></div>
       </div>
       {dashStats.alertas.length > 0 && <div style={css.card}><div style={css.cardH}><I d={ic.warn} color={T.amber} />Alertas</div>{dashStats.alertas.map((a, i) => <div key={i} style={css.alert(a.tipo)}><I d={ic.warn} size={14} color={a.tipo === 'danger' ? T.red : T.amber} />{a.msg}</div>)}</div>}
+
+      {/* TEMPO DE TRABALHO */}
+      {tempoStats.length > 0 && tempoStats.some(t => t.hoje > 0 || t.mediaSemana > 0) && (
+        <div style={css.card}>
+          <div style={css.cardH}><svg width="16" height="16" viewBox="0 0 24 24" fill={T.blue}><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg> Tempo de Trabalho</div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={css.table}>
+              <thead><tr>
+                <th style={css.th}>Nome</th>
+                <th style={{ ...css.th, textAlign: 'center' }}>Hoje</th>
+                <th style={{ ...css.th, textAlign: 'center' }}>Méd. Sem.</th>
+                <th style={{ ...css.th, textAlign: 'center' }}>Méd. Mês</th>
+              </tr></thead>
+              <tbody>
+                {tempoStats.map(p => (
+                  <tr key={p.id}>
+                    <td style={{ ...css.td, fontWeight: 500, fontSize: 13 }}>{p.nome}</td>
+                    <td style={{ ...css.td, textAlign: 'center', fontFamily: T.mono, fontWeight: 600, color: p.hoje > 0 ? T.green : T.dim }}>{fmtTempo(p.hoje)}</td>
+                    <td style={{ ...css.td, textAlign: 'center', fontFamily: T.mono, color: T.blue }}>{fmtTempo(p.mediaSemana)}</td>
+                    <td style={{ ...css.td, textAlign: 'center', fontFamily: T.mono, color: T.purple }}>{fmtTempo(p.mediaMes)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <div style={css.card}><div style={css.cardH}><I d={ic.rank} color={T.purple} />Ranking</div>
         {dashStats.ranking.map((p, i) => <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${T.border}15` }}>
           <div style={css.rnk(i)}>{i + 1}</div><div style={{ flex: 1 }}><div style={{ fontWeight: 500, fontSize: 13 }}>{p.nome}</div><div style={{ fontSize: 10, color: T.dim }}>{p.stats.diasTrabalhados}d • {formatCurrency(p.stats.totalReceber)}</div></div>
