@@ -58,7 +58,62 @@ const MENSAGENS = [
   },
 ]
 
-// ─── Theme ───
+// ─── Pool de mensagens de aquecimento (variações aleatórias) ───
+const MSG_AQUEC = {
+  primeira: [
+    "Oi! Troquei de número, salva aí! 😊", "E aí! Mudei de chip, salva esse número novo haha",
+    "Oii, troquei de número! Salva aí pfv 🙏", "Fala! Meu número mudou, anota aí o novo!",
+    "Opa! Troquei de zap, salva esse aqui 😄", "Oi! Número novo, salva aí pra não perder contato!",
+  ],
+  segunda: [
+    "E aí, como tão as coisas?", "Tudo bem por aí? Sumiu hein haha",
+    "Como tá tudo? Faz tempo que não conversa!", "E aí, firmeza? Como vai a vida?",
+    "Opa, e aí? Tudo tranquilo?", "Fala, suave? Como tá a semana?",
+  ],
+  terceira: [
+    "Viu aquele negócio que te falei?", "Lembra daquilo que a gente conversou?",
+    "Conseguiu ver aquilo lá?", "E aquele assunto, resolveu?",
+    "Ah, queria te perguntar uma coisa sobre aquilo", "Fala, viu o que te mandei outro dia?",
+  ],
+  quarta: [
+    "Haha boa! Depois a gente se fala 👊", "Show! Vou ali e já volto, tmj!",
+    "Massa! Qualquer coisa chama aí 😎", "Top! Vamos marcando, abraço!",
+    "Beleza então! Bom resto de dia! 🤙", "Fechou! Depois conversamos mais, vlw!",
+  ],
+  quinta: [
+    "Bom dia! Tudo certo por aí?", "Opa, bom dia! Como acordou?",
+    "Fala! Bom dia, tudo bem?", "Dia! Tranquilo aí?",
+  ],
+  sexta: [
+    "Cara, tu viu o jogo ontem? kkkk", "Mano, que calor tá fazendo hj né",
+    "Kkk tu viu aquele vídeo que viralizou?", "Haha real, tá osso ultimamente",
+    "Vdd, também tô nessa correria", "Pois é, a semana tá voando",
+  ],
+  setima: [
+    "Tmj! Qualquer coisa manda msg aqui", "Valeu! Fica com Deus 🙏",
+    "Fechou! Abraço!", "Top, depois a gente conversa mais!",
+    "Beleza! Bom final de semana!", "Show de bola, até mais!",
+  ],
+  oitava: [
+    "Ah sim, entendi! Boa sorte com isso", "Que massa, espero que dê certo!",
+    "Boa! Torço por ti", "Legal demais, me conta depois como foi",
+  ],
+}
+const pickMsg = (arr) => arr[Math.floor(Math.random() * arr.length)]
+const MSG_POOLS = [MSG_AQUEC.primeira, MSG_AQUEC.segunda, MSG_AQUEC.terceira, MSG_AQUEC.quarta, MSG_AQUEC.quinta, MSG_AQUEC.sexta, MSG_AQUEC.setima, MSG_AQUEC.oitava]
+
+// ─── Regras de aquecimento por dia ───
+const AQUEC_REGRAS = {
+  1: { contatos: 3, msgs: 8, ligacoes: [], salvar: 3, disparos: 0 },
+  2: { contatos: 6, msgs: 5, ligacoes: [180], salvar: 6, disparos: 0 },
+  3: { contatos: 8, msgs: 3, ligacoes: [60, 300], salvar: 2, disparos: 8 },
+  4: { contatos: 8, msgs: 3, ligacoes: [120], salvar: 1, disparos: 12 },
+  5: { contatos: 8, msgs: 3, ligacoes: [], salvar: 0, disparos: 23 },
+  6: { contatos: 4, msgs: 3, ligacoes: [60], salvar: 1, disparos: 27 },
+  7: { contatos: 3, msgs: 3, ligacoes: [], salvar: 0, disparos: 32 },
+}
+// Timers entre mensagens (segundos) - variação pra parecer humano
+const TIMERS_MSG = [0, 120, 180, 7200, 300, 120, 3600, 180] // msg1=instant, msg2=2min, msg3=3min, msg4=2h, etc
 const T = {
   bg: '#0c0f14', s1: '#13171f', s2: '#1a1f2b', s3: '#222838',
   border: '#2a3040', text: '#e4eaf0', dim: '#6b7688',
@@ -171,6 +226,11 @@ export default function App() {
   const [timerElapsed, setTimerElapsed] = useState(0)
   const [activeSessaoId, setActiveSessaoId] = useState(null)
   const [showBloqueioMenu, setShowBloqueioMenu] = useState(false)
+  const [chips, setChips] = useState([])
+  const [contatosAquec, setContatosAquec] = useState([])
+  const [tarefasAquec, setTarefasAquec] = useState([])
+  const [aquecView, setAquecView] = useState(null) // chip id being viewed
+  const [funcScreen, setFuncScreen] = useState(null) // 'aquecimento' | 'disparo' | null (menu)
 
   const isAdmin = user?.role === 'admin'
 
@@ -186,7 +246,7 @@ export default function App() {
   // ─── Load all data when logged in ───
   const loadData = useCallback(async () => {
     if (!user) return
-    const [u, r, p, l, n, b, s] = await Promise.all([
+    const [u, r, p, l, n, b, s, ch, ca, ta] = await Promise.all([
       supabase.from('usuarios').select('*').order('nome'),
       supabase.from('registros').select('*'),
       supabase.from('pagamentos').select('*'),
@@ -194,6 +254,9 @@ export default function App() {
       supabase.from('numeros').select('*'),
       supabase.from('bloqueios').select('*').order('created_at', { ascending: false }),
       supabase.from('sessoes_tempo').select('*').order('created_at', { ascending: false }),
+      supabase.from('chips').select('*'),
+      supabase.from('contatos_aquecimento').select('*').eq('ativo', true),
+      supabase.from('tarefas_aquecimento').select('*').order('ordem'),
     ])
     if (u.data) setUsuarios(u.data)
     if (r.data) setRegistros(r.data)
@@ -202,6 +265,9 @@ export default function App() {
     if (n.data) setNumeros(n.data)
     if (b.data) setBloqueios(b.data)
     if (s.data) setSessoes(s.data)
+    if (ch.data) setChips(ch.data)
+    if (ca.data) setContatosAquec(ca.data)
+    if (ta.data) setTarefasAquec(ta.data)
   }, [user])
 
   useEffect(() => { loadData() }, [loadData])
@@ -340,9 +406,9 @@ export default function App() {
   // ─── Timer actions ───
   const [timerTick, setTimerTick] = useState(0)
 
-  const startTimer = async (pessoaId) => {
+  const startTimer = async (pessoaId, tipo = 'disparo') => {
     const now = new Date().toISOString()
-    const { data: sess } = await supabase.from('sessoes_tempo').insert({ usuario_id: pessoaId, data: today(), inicio: now }).select().single()
+    const { data: sess } = await supabase.from('sessoes_tempo').insert({ usuario_id: pessoaId, data: today(), inicio: now, tipo }).select().single()
     if (sess) setActiveSessaoId(sess.id)
     setTimerRunning(true)
     setTimerStart(Date.now())
@@ -381,6 +447,86 @@ export default function App() {
     const h = Math.floor(total / 3600)
     const m = Math.floor((total % 3600) / 60)
     return total > 0 ? `${h > 0 ? h + 'h ' : ''}${m}min` : null
+  }
+
+  // ─── Aquecimento actions ───
+  const addChip = async (usuarioId, numero) => {
+    let clean = numero.replace(/\D/g, '')
+    if (clean.length >= 12 && clean.startsWith('55')) clean = clean.slice(2)
+    await supabase.from('chips').insert({ usuario_id: usuarioId, numero: clean })
+    await loadData()
+  }
+
+  const gerarTarefasAquecimento = async (chipId) => {
+    const chip = chips.find(c => c.id === chipId)
+    if (!chip) return
+    // Check if tasks already exist for today
+    const existing = tarefasAquec.filter(t => t.chip_id === chipId && t.data === today())
+    if (existing.length > 0) return // already generated
+
+    const dia = chip.dia_ciclo
+    const regra = AQUEC_REGRAS[dia] || { contatos: 3, msgs: 3, ligacoes: [], salvar: 0, disparos: 43 }
+    const numContatos = Math.min(regra.contatos, contatosAquec.length)
+    // Pick random contatos
+    const shuffled = [...contatosAquec].sort(() => Math.random() - 0.5).slice(0, numContatos)
+
+    const tarefas = []
+    let ordem = 0
+
+    // Salvar contatos task
+    if (regra.salvar > 0) {
+      tarefas.push({ chip_id: chipId, contato_id: null, data: today(), msg_numero: 0, mensagem: `📱 Salvar ${regra.salvar} contato(s) novo(s) na agenda`, tipo: 'salvar_contato', timer_segundos: 0, ordem: ordem++ })
+    }
+
+    // Message tasks for each contato
+    shuffled.forEach((contato, ci) => {
+      const numMsgs = regra.msgs
+      for (let m = 0; m < numMsgs; m++) {
+        const pool = MSG_POOLS[m % MSG_POOLS.length]
+        const msg = pickMsg(pool)
+        const timer = m === 0 ? 0 : TIMERS_MSG[m % TIMERS_MSG.length]
+        tarefas.push({
+          chip_id: chipId, contato_id: contato.id, data: today(),
+          msg_numero: m + 1, mensagem: msg, tipo: 'mensagem',
+          timer_segundos: timer, ordem: ordem++
+        })
+      }
+    })
+
+    // Ligacoes
+    regra.ligacoes.forEach((duracao, i) => {
+      const contato = shuffled[i % shuffled.length]
+      const min = Math.round(duracao / 60)
+      tarefas.push({
+        chip_id: chipId, contato_id: contato?.id || null, data: today(),
+        msg_numero: 0, mensagem: `📞 Ligar por ${min} minuto(s)`, tipo: 'ligacao',
+        timer_segundos: duracao, ordem: ordem++
+      })
+    })
+
+    await supabase.from('tarefas_aquecimento').insert(tarefas)
+    await loadData()
+  }
+
+  const concluirTarefa = async (tarefaId) => {
+    await supabase.from('tarefas_aquecimento').update({ concluida: true, concluida_at: new Date().toISOString() }).eq('id', tarefaId)
+    await loadData()
+
+    // Check if all tasks for this chip today are done
+    const tarefa = tarefasAquec.find(t => t.id === tarefaId)
+    if (!tarefa) return
+    const todasHoje = tarefasAquec.filter(t => t.chip_id === tarefa.chip_id && t.data === today())
+    const todasConcluidas = todasHoje.every(t => t.id === tarefaId || t.concluida)
+    if (todasConcluidas) {
+      // Advance chip day
+      const chip = chips.find(c => c.id === tarefa.chip_id)
+      if (chip && chip.dia_ciclo < 7) {
+        await supabase.from('chips').update({ dia_ciclo: chip.dia_ciclo + 1, ultimo_aquecimento: today() }).eq('id', chip.id)
+      } else if (chip && chip.dia_ciclo >= 7) {
+        await supabase.from('chips').update({ status: 'ativo', ultimo_aquecimento: today() }).eq('id', chip.id)
+      }
+      await loadData()
+    }
   }
 
   // ─── Week ───
@@ -487,7 +633,7 @@ export default function App() {
       )
     }
 
-    // Funcionario disparo view
+    // Funcionario - has picked name, show menu or screen
     const pessoa = usuarios.find(u => u.id === dispPessoa)
     if (!pessoa) {
       return (
@@ -500,12 +646,233 @@ export default function App() {
         </div>
       )
     }
+
+    // Chip data for this pessoa
+    const meuChip = chips.find(c => c.usuario_id === pessoa.id)
+    const aquecHoje = meuChip ? tarefasAquec.filter(t => t.chip_id === meuChip.id && t.data === today()) : []
+    const aquecConcluidas = aquecHoje.filter(t => t.concluida).length
+    const aquecTotal = aquecHoje.length
+    const aquecDone = aquecTotal > 0 && aquecConcluidas === aquecTotal
+
+    // Disparo data
     const minhasListas = listas.filter(l => l.usuario_id === pessoa.id && l.data === today())
     const meusNumeros = numeros.filter(n => minhasListas.some(l => l.id === n.lista_id))
-    const pendentes = meusNumeros.filter(n => !n.enviado)
-    const enviados = meusNumeros.filter(n => n.enviado)
-    const totalNums = meusNumeros.length
-    const allDone = totalNums > 0 && pendentes.length === 0
+    const disparoPendentes = meusNumeros.filter(n => !n.enviado)
+    const disparoEnviados = meusNumeros.filter(n => n.enviado)
+    const disparoTotal = meusNumeros.length
+    const disparoDone = disparoTotal > 0 && disparoPendentes.length === 0
+
+    // MENU SCREEN - choose aquecimento or disparo
+    if (!funcScreen) {
+      return (
+        <div style={css.wrap}>
+          <div style={css.header}>
+            <button onClick={() => { setDispPessoa(null); setFuncScreen(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}><I d={ic.left} color={T.dim} /></button>
+            <div style={css.title}>{pessoa.nome}</div>
+            <button onClick={handleLogout} style={css.btn('ghost')}><I d={ic.logout} size={14} color={T.dim} />Sair</button>
+          </div>
+          <div style={css.body}>
+            <div style={{ fontSize: 12, color: T.dim, marginBottom: 14, textAlign: 'center' }}>Hoje — {formatDate(today())}{meuChip ? ` • Chip Dia ${meuChip.dia_ciclo}/7` : ''}</div>
+
+            {/* AQUECIMENTO CARD */}
+            <button onClick={async () => {
+              if (meuChip) { await gerarTarefasAquecimento(meuChip.id) }
+              setFuncScreen('aquecimento')
+            }} style={{ width: '100%', textAlign: 'left', padding: 0, marginBottom: 12, borderRadius: T.r2, background: 'linear-gradient(135deg, #1a1f3a, #1e2740)', border: `2px solid ${aquecDone ? T.green + '44' : '#f59e0b33'}`, cursor: 'pointer', fontFamily: T.font, color: T.text, overflow: 'hidden' }}>
+              <div style={{ padding: '20px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ width: 52, height: 52, borderRadius: 14, background: aquecDone ? 'linear-gradient(135deg, #22c55e, #16a34a)' : 'linear-gradient(135deg, #f59e0b, #d97706)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: aquecDone ? '0 4px 20px rgba(34,197,94,.3)' : '0 4px 20px rgba(245,158,11,.3)', flexShrink: 0 }}>
+                  {aquecDone ? <I d={ic.check} size={26} color="#fff" /> : <span style={{ fontSize: 24 }}>🔥</span>}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700 }}>Aquecimento</div>
+                  <div style={{ fontSize: 12, color: T.dim, marginTop: 2 }}>
+                    {!meuChip ? 'Nenhum chip cadastrado' : aquecDone ? '✅ Concluído!' : aquecTotal > 0 ? `${aquecConcluidas}/${aquecTotal} tarefas` : 'Pendente'}
+                  </div>
+                </div>
+                {aquecDone && <span style={css.badge(T.green, T.greenGlow)}>Feito</span>}
+                {!aquecDone && aquecTotal > 0 && <span style={css.badge(T.amber, T.amberGlow)}>{aquecConcluidas}/{aquecTotal}</span>}
+              </div>
+              {aquecTotal > 0 && <div style={{ height: 4, background: T.s2 }}><div style={{ height: '100%', width: `${(aquecConcluidas / aquecTotal) * 100}%`, background: aquecDone ? T.green : `linear-gradient(90deg, ${T.amber}, #f97316)`, transition: 'width .3s' }} /></div>}
+            </button>
+
+            {/* DISPARO CARD */}
+            <button onClick={() => setFuncScreen('disparo')} style={{ width: '100%', textAlign: 'left', padding: 0, marginBottom: 12, borderRadius: T.r2, background: 'linear-gradient(135deg, #1a1f3a, #1e2740)', border: `2px solid ${disparoDone ? T.green + '44' : T.purple + '33'}`, cursor: 'pointer', fontFamily: T.font, color: T.text, overflow: 'hidden' }}>
+              <div style={{ padding: '20px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ width: 52, height: 52, borderRadius: 14, background: disparoDone ? 'linear-gradient(135deg, #22c55e, #16a34a)' : 'linear-gradient(135deg, #a78bfa, #7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: disparoDone ? '0 4px 20px rgba(34,197,94,.3)' : '0 4px 20px rgba(167,139,250,.3)', flexShrink: 0 }}>
+                  {disparoDone ? <I d={ic.check} size={26} color="#fff" /> : <I d={ic.send} size={24} color="#fff" />}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700 }}>Disparos</div>
+                  <div style={{ fontSize: 12, color: T.dim, marginTop: 2 }}>
+                    {disparoDone ? '✅ Concluído!' : disparoTotal > 0 ? `${disparoEnviados.length}/${disparoTotal} enviados` : 'Sem lista hoje'}
+                  </div>
+                </div>
+                {disparoDone && <span style={css.badge(T.green, T.greenGlow)}>Feito</span>}
+                {!disparoDone && disparoTotal > 0 && <span style={css.badge(T.purple, T.purpleGlow)}>{disparoEnviados.length}/{disparoTotal}</span>}
+              </div>
+              {disparoTotal > 0 && <div style={{ height: 4, background: T.s2 }}><div style={{ height: '100%', width: `${(disparoEnviados.length / disparoTotal) * 100}%`, background: disparoDone ? T.green : `linear-gradient(90deg, ${T.purple}, ${T.blue})`, transition: 'width .3s' }} /></div>}
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    // AQUECIMENTO SCREEN
+    if (funcScreen === 'aquecimento') {
+      const proxTarefa = aquecHoje.find(t => !t.concluida)
+
+      return (
+        <div style={css.wrap}>
+          <div style={css.header}>
+            <button onClick={() => setFuncScreen(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}><I d={ic.left} color={T.dim} /></button>
+            <div style={css.title}>🔥 Aquecimento</div>
+            {meuChip && <span style={css.badge(T.amber, T.amberGlow)}>Dia {meuChip.dia_ciclo}/7</span>}
+          </div>
+          <div style={css.body}>
+            {/* TIMER AQUECIMENTO */}
+            {aquecTotal > 0 && !aquecDone && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, padding: '12px 16px', background: timerRunning ? 'linear-gradient(135deg, rgba(245,158,11,.08), rgba(251,191,36,.08))' : T.s1, borderRadius: T.r2, border: `1px solid ${timerRunning ? T.amber + '33' : T.border}` }}>
+                {!timerRunning ? (
+                  <button onClick={() => startTimer(pessoa.id, 'aquecimento')} style={{ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg, #f59e0b, #d97706)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(245,158,11,.35)', flexShrink: 0 }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
+                  </button>
+                ) : (
+                  <button onClick={pauseTimer} style={{ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg, #6b7280, #4b5563)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(107,114,128,.35)', flexShrink: 0 }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                  </button>
+                )}
+                <div style={{ flex: 1, textAlign: 'center' }}>
+                  <div style={{ fontFamily: T.mono, fontSize: 26, fontWeight: 700, color: timerRunning ? T.amber : T.dim }}>{getTimerDisplay()}</div>
+                  <div style={{ fontSize: 10, color: T.dim, marginTop: 2 }}>{timerRunning ? 'Aquecendo...' : 'Aperte play'}</div>
+                </div>
+                {timerRunning && <div style={{ width: 10, height: 10, borderRadius: '50%', background: T.amber, boxShadow: `0 0 8px ${T.amber}` }} />}
+              </div>
+            )}
+
+            {/* Progress */}
+            {aquecTotal > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, color: T.dim }}>Progresso</span>
+                  <span style={css.badge(aquecDone ? T.green : T.amber, aquecDone ? T.greenGlow : T.amberGlow)}>{aquecConcluidas}/{aquecTotal}</span>
+                </div>
+                <div style={{ height: 6, borderRadius: 3, background: T.s2, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${(aquecConcluidas / aquecTotal) * 100}%`, borderRadius: 3, background: aquecDone ? T.green : `linear-gradient(90deg, ${T.amber}, #f97316)`, transition: 'width .3s' }} />
+                </div>
+              </div>
+            )}
+
+            {/* ALL DONE */}
+            {aquecDone && (
+              <div style={{ ...css.card, textAlign: 'center', padding: 30, border: `1px solid ${T.green}33` }}>
+                <div style={{ fontSize: 40, marginBottom: 8 }}>🎉</div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: T.green, marginBottom: 4 }}>Aquecimento concluído!</div>
+                <div style={{ fontSize: 12, color: T.dim }}>Todas as tarefas do dia foram feitas.</div>
+                <button onClick={() => setFuncScreen(null)} style={{ ...css.btn('primary'), marginTop: 14 }}>← Voltar</button>
+              </div>
+            )}
+
+            {/* NO CHIP */}
+            {!meuChip && (
+              <div style={{ ...css.card, textAlign: 'center', padding: 30 }}>
+                <div style={{ fontSize: 40, marginBottom: 8 }}>📱</div>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>Nenhum chip cadastrado</div>
+                <div style={{ fontSize: 12, color: T.dim, marginTop: 4 }}>Peça ao gestor para cadastrar seu chip.</div>
+              </div>
+            )}
+
+            {/* NEXT TASK */}
+            {proxTarefa && !aquecDone && (
+              <div style={{ ...css.card, border: `1px solid ${T.amber}33`, padding: 20 }}>
+                <div style={{ fontSize: 10, color: T.dim, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
+                  Tarefa {aquecConcluidas + 1} de {aquecTotal}
+                </div>
+
+                {proxTarefa.tipo === 'salvar_contato' && (
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 10 }}>{proxTarefa.mensagem}</div>
+                    <div style={{ fontSize: 12, color: T.dim, marginBottom: 14 }}>Salve os contatos que aparecem na sua lista de conversas na agenda do celular.</div>
+                    <button onClick={() => concluirTarefa(proxTarefa.id)} style={{ ...css.btn('success'), width: '100%', justifyContent: 'center', padding: '12px 0' }}>✅ Contatos salvos</button>
+                  </div>
+                )}
+
+                {proxTarefa.tipo === 'mensagem' && (() => {
+                  const contato = contatosAquec.find(c => c.id === proxTarefa.contato_id)
+                  return (
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>Enviar mensagem para {contato?.nome || 'Contato'}</div>
+                      <div style={{ fontFamily: T.mono, fontSize: 13, color: T.dim, marginBottom: 10 }}>{contato ? formatPhone(contato.numero) : ''}</div>
+                      <div style={{ background: T.s2, borderRadius: T.r, padding: 12, marginBottom: 14, fontSize: 13, lineHeight: 1.5, borderLeft: `3px solid ${T.amber}` }}>
+                        "{proxTarefa.mensagem}"
+                      </div>
+                      <button onClick={() => {
+                        const num = contato ? ('55' + contato.numero) : ''
+                        const encoded = encodeURIComponent(proxTarefa.mensagem)
+                        window.location.href = `https://wa.me/${num}?text=${encoded}`
+                        setTimeout(() => concluirTarefa(proxTarefa.id), 500)
+                      }} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '14px 0', borderRadius: T.r, background: '#25D366', border: 'none', cursor: 'pointer', fontFamily: T.font, fontSize: 14, fontWeight: 600, color: '#fff' }}>
+                        <WaIcon /> Enviar no WhatsApp
+                      </button>
+                    </div>
+                  )
+                })()}
+
+                {proxTarefa.tipo === 'ligacao' && (() => {
+                  const contato = contatosAquec.find(c => c.id === proxTarefa.contato_id)
+                  const minutos = Math.round(proxTarefa.timer_segundos / 60)
+                  return (
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{proxTarefa.mensagem}</div>
+                      <div style={{ fontSize: 12, color: T.dim, marginBottom: 14 }}>Para {contato?.nome || 'Contato'} — {contato ? formatPhone(contato.numero) : ''}</div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <a href={`tel:+55${contato?.numero || ''}`} style={{ ...css.btn('primary'), flex: 1, justifyContent: 'center', textDecoration: 'none', padding: '12px 0' }}>📞 Ligar</a>
+                        <button onClick={() => concluirTarefa(proxTarefa.id)} style={{ ...css.btn('success'), flex: 1, justifyContent: 'center', padding: '12px 0' }}>✅ Liguei</button>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* Timer wait between messages */}
+                {proxTarefa.timer_segundos > 0 && !proxTarefa.concluida && (() => {
+                  const prevTarefa = aquecHoje[aquecHoje.indexOf(proxTarefa) - 1]
+                  if (prevTarefa?.concluida_at) {
+                    const elapsed = Math.round((Date.now() - new Date(prevTarefa.concluida_at).getTime()) / 1000)
+                    const remaining = proxTarefa.timer_segundos - elapsed
+                    if (remaining > 0) {
+                      const rm = Math.floor(remaining / 60)
+                      const rs = remaining % 60
+                      const rh = Math.floor(rm / 60)
+                      return (
+                        <div style={{ marginTop: 12, textAlign: 'center', padding: 14, background: T.s2, borderRadius: T.r }}>
+                          <div style={{ fontSize: 11, color: T.dim, marginBottom: 4 }}>⏳ Aguardando intervalo</div>
+                          <div style={{ fontFamily: T.mono, fontSize: 22, fontWeight: 700, color: T.amber }}>
+                            {rh > 0 ? `${rh}h ${rm % 60}min` : `${rm}:${String(rs).padStart(2, '0')}`}
+                          </div>
+                        </div>
+                      )
+                    }
+                  }
+                  return null
+                })()}
+              </div>
+            )}
+
+            {/* Completed tasks */}
+            {aquecConcluidas > 0 && !aquecDone && (
+              <div style={{ marginTop: 12, fontSize: 11, color: T.dim }}>
+                ✅ {aquecConcluidas} tarefa(s) concluída(s)
+              </div>
+            )}
+          </div>
+        </div>
+      )
+    }
+
+    // DISPARO SCREEN (existing code)
+    const pendentes = disparoPendentes
+    const enviados = disparoEnviados
+    const totalNums = disparoTotal
+    const allDone = disparoDone
 
     // Historico
     const histDates = [...new Set(listas.filter(l => l.usuario_id === pessoa.id).map(l => l.data))].sort((a, b) => b.localeCompare(a))
@@ -523,8 +890,8 @@ export default function App() {
     return (
       <div style={css.wrap}>
         <div style={css.header}>
-          <button onClick={() => setDispPessoa(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}><I d={ic.left} color={T.dim} /></button>
-          <div style={css.title}>{pessoa.nome}</div>
+          <button onClick={() => setFuncScreen(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}><I d={ic.left} color={T.dim} /></button>
+          <div style={css.title}>{pessoa.nome} — Disparos</div>
           <button onClick={handleLogout} style={css.btn('ghost')}><I d={ic.logout} size={14} color={T.dim} />Sair</button>
         </div>
         <div style={css.body}>
@@ -853,6 +1220,7 @@ export default function App() {
     { id: 'equipe', label: 'Equipe', icon: ic.people },
     { id: 'pagamentos', label: 'Pagam.', icon: ic.pay },
     { id: 'ranking', label: 'Ranking', icon: ic.rank },
+    { id: 'aquecimento', label: 'Aquec.', icon: ic.star },
   ]
 
   return (
@@ -875,10 +1243,11 @@ export default function App() {
 
         {tab === 'disparos' && <DisparosTab />}
         {tab === 'registro' && <RegistroTab weekDates={weekDates} shiftWeek={shiftWeek} pessoasAtivas={pessoasAtivas} getRegistro={getRegistro} toggleRegistro={toggleRegistro} getDayLabel={getDayLabel} />}
-        {tab === 'dashboard' && <DashboardTab dashStats={dashStats} sessoes={sessoes} pessoasAtivas={pessoasAtivas} />}
+        {tab === 'dashboard' && <DashboardTab dashStats={dashStats} sessoes={sessoes} pessoasAtivas={pessoasAtivas} chips={chips} tarefasAquec={tarefasAquec} />}
         {tab === 'equipe' && <EquipeTab pessoasFiltradas={pessoasFiltradas} getStats={getStats} setModal={setModal} />}
         {tab === 'pagamentos' && <PagamentosTab pagamentos={pagamentos} usuarios={usuarios} filterPessoa={filterPessoa} pessoasAtivas={pessoasAtivas} setModal={setModal} getStats={getStats} />}
         {tab === 'ranking' && <RankingTab pessoasAtivas={pessoasAtivas} getStats={getStats} />}
+        {tab === 'aquecimento' && <AquecimentoAdminTab chips={chips} usuarios={usuarios} contatosAquec={contatosAquec} tarefasAquec={tarefasAquec} pessoasAtivas={pessoasAtivas} addChip={addChip} loadData={loadData} />}
       </div>
 
       {modal?.type === 'addPessoa' && <NovaPessoaModal onClose={() => setModal(null)} />}
@@ -970,7 +1339,7 @@ function RegistroTab({ weekDates, shiftWeek, pessoasAtivas, getRegistro, toggleR
   )
 }
 
-function DashboardTab({ dashStats, sessoes, pessoasAtivas }) {
+function DashboardTab({ dashStats, sessoes, pessoasAtivas, chips, tarefasAquec }) {
   const fmtTempo = (sec) => {
     if (!sec || sec <= 0) return '—'
     const h = Math.floor(sec / 3600)
@@ -982,28 +1351,14 @@ function DashboardTab({ dashStats, sessoes, pessoasAtivas }) {
   const tempoStats = useMemo(() => {
     if (!sessoes || sessoes.length === 0) return []
     const todayStr = today()
-    const weekRange = getWeekRange(todayStr)
-    const monthRange = getMonthRange(todayStr)
-
     return pessoasAtivas.map(p => {
       const mySess = sessoes.filter(s => s.usuario_id === p.id && s.segundos > 0)
-      const hoje = mySess.filter(s => s.data === todayStr).reduce((sum, s) => sum + (s.segundos || 0), 0)
-      const semana = mySess.filter(s => s.data >= weekRange.start && s.data <= weekRange.end)
-      const mes = mySess.filter(s => s.data >= monthRange.start && s.data <= monthRange.end)
-
-      const diasSemana = [...new Set(semana.map(s => s.data))].length
-      const diasMes = [...new Set(mes.map(s => s.data))].length
-      const totalSemana = semana.reduce((sum, s) => sum + (s.segundos || 0), 0)
-      const totalMes = mes.reduce((sum, s) => sum + (s.segundos || 0), 0)
-
-      return {
-        ...p,
-        hoje,
-        mediaSemana: diasSemana > 0 ? Math.round(totalSemana / diasSemana) : 0,
-        mediaMes: diasMes > 0 ? Math.round(totalMes / diasMes) : 0,
-        totalMes,
-      }
-    }).sort((a, b) => b.hoje - a.hoje)
+      const hojeAll = mySess.filter(s => s.data === todayStr)
+      const hojeAquec = hojeAll.filter(s => s.tipo === 'aquecimento').reduce((sum, s) => sum + (s.segundos || 0), 0)
+      const hojeDisp = hojeAll.filter(s => s.tipo === 'disparo' || !s.tipo).reduce((sum, s) => sum + (s.segundos || 0), 0)
+      const hojeTotal = hojeAquec + hojeDisp
+      return { ...p, hojeAquec, hojeDisp, hojeTotal }
+    }).sort((a, b) => b.hojeTotal - a.hojeTotal)
   }, [sessoes, pessoasAtivas])
 
   return (
@@ -1015,25 +1370,59 @@ function DashboardTab({ dashStats, sessoes, pessoasAtivas }) {
       </div>
       {dashStats.alertas.length > 0 && <div style={css.card}><div style={css.cardH}><I d={ic.warn} color={T.amber} />Alertas</div>{dashStats.alertas.map((a, i) => <div key={i} style={css.alert(a.tipo)}><I d={ic.warn} size={14} color={a.tipo === 'danger' ? T.red : T.amber} />{a.msg}</div>)}</div>}
 
-      {/* TEMPO DE TRABALHO */}
-      {tempoStats.length > 0 && tempoStats.some(t => t.hoje > 0 || t.mediaSemana > 0) && (
+      {/* STATUS CHIPS */}
+      {chips && chips.length > 0 && (
         <div style={css.card}>
-          <div style={css.cardH}><svg width="16" height="16" viewBox="0 0 24 24" fill={T.blue}><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg> Tempo de Trabalho</div>
+          <div style={css.cardH}><span style={{ fontSize: 14 }}>🔥</span> Status dos Chips</div>
+          {chips.map(ch => {
+            const usr = pessoasAtivas.find(p => p.id === ch.usuario_id)
+            if (!usr) return null
+            const hojeTarefas = tarefasAquec ? tarefasAquec.filter(t => t.chip_id === ch.id && t.data === today()) : []
+            const feitas = hojeTarefas.filter(t => t.concluida).length
+            const total = hojeTarefas.length
+            const regra = AQUEC_REGRAS[ch.dia_ciclo]
+            return (
+              <div key={ch.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${T.border}15` }}>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: ch.status === 'ativo' ? T.greenGlow : T.amberGlow, border: `1px solid ${ch.status === 'ativo' ? T.green : T.amber}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, fontFamily: T.mono, color: ch.status === 'ativo' ? T.green : T.amber }}>
+                  D{ch.dia_ciclo}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 500, fontSize: 13 }}>{usr.nome}</div>
+                  <div style={{ fontSize: 10, color: T.dim }}>
+                    {ch.status === 'ativo' ? 'Chip ativo' : `Aquecendo Dia ${ch.dia_ciclo}/7`}
+                    {total > 0 && ` • ${feitas}/${total} tarefas`}
+                    {regra && ` • ${regra.disparos} disp.`}
+                  </div>
+                </div>
+                <span style={css.badge(
+                  total > 0 && feitas === total ? T.green : total > 0 ? T.amber : T.dim,
+                  total > 0 && feitas === total ? T.greenGlow : total > 0 ? T.amberGlow : T.s2
+                )}>{total > 0 ? (feitas === total ? '✅' : `${feitas}/${total}`) : '—'}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* TEMPO DE TRABALHO */}
+      {tempoStats.length > 0 && tempoStats.some(t => t.hojeTotal > 0) && (
+        <div style={css.card}>
+          <div style={css.cardH}><svg width="16" height="16" viewBox="0 0 24 24" fill={T.blue}><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg> Tempo de Trabalho — Hoje</div>
           <div style={{ overflowX: 'auto' }}>
             <table style={css.table}>
               <thead><tr>
                 <th style={css.th}>Nome</th>
-                <th style={{ ...css.th, textAlign: 'center' }}>Hoje</th>
-                <th style={{ ...css.th, textAlign: 'center' }}>Méd. Sem.</th>
-                <th style={{ ...css.th, textAlign: 'center' }}>Méd. Mês</th>
+                <th style={{ ...css.th, textAlign: 'center', color: T.amber }}>🔥 Aquec.</th>
+                <th style={{ ...css.th, textAlign: 'center', color: T.purple }}>🚀 Disp.</th>
+                <th style={{ ...css.th, textAlign: 'center', color: T.green }}>Total</th>
               </tr></thead>
               <tbody>
                 {tempoStats.map(p => (
                   <tr key={p.id}>
                     <td style={{ ...css.td, fontWeight: 500, fontSize: 13 }}>{p.nome}</td>
-                    <td style={{ ...css.td, textAlign: 'center', fontFamily: T.mono, fontWeight: 600, color: p.hoje > 0 ? T.green : T.dim }}>{fmtTempo(p.hoje)}</td>
-                    <td style={{ ...css.td, textAlign: 'center', fontFamily: T.mono, color: T.blue }}>{fmtTempo(p.mediaSemana)}</td>
-                    <td style={{ ...css.td, textAlign: 'center', fontFamily: T.mono, color: T.purple }}>{fmtTempo(p.mediaMes)}</td>
+                    <td style={{ ...css.td, textAlign: 'center', fontFamily: T.mono, color: T.amber }}>{fmtTempo(p.hojeAquec)}</td>
+                    <td style={{ ...css.td, textAlign: 'center', fontFamily: T.mono, color: T.purple }}>{fmtTempo(p.hojeDisp)}</td>
+                    <td style={{ ...css.td, textAlign: 'center', fontFamily: T.mono, fontWeight: 600, color: T.green }}>{fmtTempo(p.hojeTotal)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1268,6 +1657,124 @@ function TempoHistorico({ pessoaId, sessoes }) {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function AquecimentoAdminTab({ chips, usuarios, contatosAquec, tarefasAquec, pessoasAtivas, addChip, loadData }) {
+  const [showAddChip, setShowAddChip] = useState(false)
+  const [chipUser, setChipUser] = useState('')
+  const [chipNum, setChipNum] = useState('')
+  const [showAddContato, setShowAddContato] = useState(false)
+  const [contatoNome, setContatoNome] = useState('')
+  const [contatoNum, setContatoNum] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const addContato = async () => {
+    if (!contatoNome.trim() || !contatoNum.trim()) return
+    setSaving(true)
+    let clean = contatoNum.replace(/\D/g, '')
+    if (clean.length >= 12 && clean.startsWith('55')) clean = clean.slice(2)
+    await supabase.from('contatos_aquecimento').insert({ nome: contatoNome, numero: clean })
+    setContatoNome(''); setContatoNum(''); setShowAddContato(false); setSaving(false)
+    await loadData()
+  }
+
+  const deleteContato = async (id) => {
+    if (!confirm('Remover este contato?')) return
+    await supabase.from('contatos_aquecimento').delete().eq('id', id)
+    await loadData()
+  }
+
+  const resetChip = async (chipId) => {
+    if (!confirm('Reiniciar ciclo deste chip? Volta pro Dia 1.')) return
+    await supabase.from('chips').update({ dia_ciclo: 1, status: 'aquecendo', inicio_ciclo: today() }).eq('id', chipId)
+    await loadData()
+  }
+
+  const deleteChip = async (chipId) => {
+    if (!confirm('Excluir este chip?')) return
+    await supabase.from('chips').delete().eq('id', chipId)
+    await loadData()
+  }
+
+  return (
+    <div>
+      {/* STATUS DOS CHIPS */}
+      <div style={css.card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={css.cardH}><I d={ic.star} color={T.amber} /> Chips da Equipe</div>
+          <button style={css.btn('primary')} onClick={() => setShowAddChip(!showAddChip)}><I d={ic.add} color="#fff" />Chip</button>
+        </div>
+
+        {showAddChip && (
+          <div style={{ background: T.s2, borderRadius: T.r, padding: 12, marginBottom: 12 }}>
+            <select style={{ ...css.select, width: '100%', marginBottom: 8 }} value={chipUser} onChange={e => setChipUser(e.target.value)}>
+              <option value="">Selecione funcionário</option>
+              {pessoasAtivas.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+            </select>
+            <input style={{ ...css.input, marginBottom: 8 }} placeholder="Número do chip (ex: 11999887766)" value={chipNum} onChange={e => setChipNum(e.target.value)} />
+            <button style={css.btn('primary')} onClick={async () => {
+              if (!chipUser || !chipNum.trim()) return
+              setSaving(true); await addChip(chipUser, chipNum); setChipNum(''); setChipUser(''); setShowAddChip(false); setSaving(false)
+            }} disabled={saving}>{saving ? 'Salvando...' : 'Adicionar Chip'}</button>
+          </div>
+        )}
+
+        {chips.length === 0 ? (
+          <div style={{ color: T.dim, fontSize: 12, textAlign: 'center', padding: 16 }}>Nenhum chip cadastrado.</div>
+        ) : chips.map(ch => {
+          const usr = usuarios.find(u => u.id === ch.usuario_id)
+          const hojeTarefas = tarefasAquec.filter(t => t.chip_id === ch.id && t.data === today())
+          const feitas = hojeTarefas.filter(t => t.concluida).length
+          const total = hojeTarefas.length
+          const regra = AQUEC_REGRAS[ch.dia_ciclo]
+          return (
+            <div key={ch.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', borderBottom: `1px solid ${T.border}15` }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: ch.status === 'ativo' ? T.greenGlow : ch.status === 'bloqueado' ? T.redGlow : T.amberGlow, border: `2px solid ${ch.status === 'ativo' ? T.green : ch.status === 'bloqueado' ? T.red : T.amber}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: ch.status === 'ativo' ? T.green : ch.status === 'bloqueado' ? T.red : T.amber, fontFamily: T.mono }}>
+                D{ch.dia_ciclo}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 500, fontSize: 13 }}>{usr?.nome || '?'}</div>
+                <div style={{ fontSize: 10, color: T.dim }}>{formatPhone(ch.numero)} • {ch.status === 'ativo' ? '✅ Ativo' : ch.status === 'bloqueado' ? '🚫 Bloqueado' : `Dia ${ch.dia_ciclo}/7`}
+                {total > 0 && ` • ${feitas}/${total} tarefas`}
+                {regra && ` • ${regra.disparos} disparos`}</div>
+              </div>
+              <button onClick={() => resetChip(ch.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.amber, fontSize: 10, padding: 4 }} title="Reiniciar ciclo">🔄</button>
+              <button onClick={() => deleteChip(ch.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.red, fontSize: 10, padding: 4 }} title="Excluir">🗑</button>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* CONTATOS DE AQUECIMENTO */}
+      <div style={css.card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={css.cardH}><I d={ic.people} color={T.blue} /> Contatos de Aquecimento</div>
+          <button style={css.btn('primary')} onClick={() => setShowAddContato(!showAddContato)}><I d={ic.add} color="#fff" />Contato</button>
+        </div>
+
+        {showAddContato && (
+          <div style={{ background: T.s2, borderRadius: T.r, padding: 12, marginBottom: 12 }}>
+            <input style={{ ...css.input, marginBottom: 8 }} placeholder="Nome do contato" value={contatoNome} onChange={e => setContatoNome(e.target.value)} />
+            <input style={{ ...css.input, marginBottom: 8 }} placeholder="Número (ex: +55 11 99999-9999)" value={contatoNum} onChange={e => setContatoNum(e.target.value)} />
+            <button style={css.btn('primary')} onClick={addContato} disabled={saving}>{saving ? 'Salvando...' : 'Adicionar'}</button>
+          </div>
+        )}
+
+        {contatosAquec.length === 0 ? (
+          <div style={{ color: T.dim, fontSize: 12, textAlign: 'center', padding: 16 }}>Nenhum contato cadastrado. Adicione números da equipe para o aquecimento.</div>
+        ) : contatosAquec.map(c => (
+          <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${T.border}15` }}>
+            <I d={ic.people} size={14} color={T.dim} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 500, fontSize: 13 }}>{c.nome}</div>
+              <div style={{ fontSize: 11, color: T.dim, fontFamily: T.mono }}>{formatPhone(c.numero)}</div>
+            </div>
+            <button onClick={() => deleteContato(c.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.red, fontSize: 10, padding: 4 }}>🗑</button>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
