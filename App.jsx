@@ -276,7 +276,7 @@ export default function App() {
   const handleLogin = async () => {
     setLoginError('')
     // Admin login
-    if (loginSenha === 'admin123') {
+    if (loginSenha === 'Herois2021*') {
       const u = { id: 'admin', nome: 'Admin', role: 'admin' }
       setUser(u)
       sessionStorage.setItem('cineplay_user', JSON.stringify(u))
@@ -1691,7 +1691,9 @@ function AquecimentoAdminTab({ chips, usuarios, contatosAquec, tarefasAquec, pes
     if (!contatoNome.trim() || !contatoNum.trim()) return
     setSaving(true)
     let clean = contatoNum.replace(/\D/g, '')
-    if (clean.length >= 12 && clean.startsWith('55')) clean = clean.slice(2)
+    if (clean.length === 13 && clean.startsWith('55')) clean = clean.slice(2)
+    if (clean.length === 12 && clean.startsWith('55')) clean = clean.slice(2)
+    if (clean.length < 10 || clean.length > 11) { alert('Número inválido. Digite DDD + número (ex: 5398443431)'); setSaving(false); return }
     await supabase.from('contatos_aquecimento').insert({ nome: contatoNome, numero: clean })
     setContatoNome(''); setContatoNum(''); setShowAddContato(false); setSaving(false)
     await loadData()
@@ -1774,7 +1776,7 @@ function AquecimentoAdminTab({ chips, usuarios, contatosAquec, tarefasAquec, pes
         {showAddContato && (
           <div style={{ background: T.s2, borderRadius: T.r, padding: 12, marginBottom: 12 }}>
             <input style={{ ...css.input, marginBottom: 8 }} placeholder="Nome do contato" value={contatoNome} onChange={e => setContatoNome(e.target.value)} />
-            <input style={{ ...css.input, marginBottom: 8 }} placeholder="Número (ex: +55 11 99999-9999)" value={contatoNum} onChange={e => setContatoNum(e.target.value)} />
+            <input style={{ ...css.input, marginBottom: 8 }} placeholder="Número (ex: 5399844-3431)" value={contatoNum} onChange={e => setContatoNum(e.target.value)} />
             <button style={css.btn('primary')} onClick={addContato} disabled={saving}>{saving ? 'Salvando...' : 'Adicionar'}</button>
           </div>
         )}
