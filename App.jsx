@@ -523,7 +523,7 @@ export default function App() {
       if (chip && chip.dia_ciclo < 7) {
         await supabase.from('chips').update({ dia_ciclo: chip.dia_ciclo + 1, ultimo_aquecimento: today() }).eq('id', chip.id)
       } else if (chip && chip.dia_ciclo >= 7) {
-        await supabase.from('chips').update({ status: 'ativo', ultimo_aquecimento: today() }).eq('id', chip.id)
+        await supabase.from('chips').update({ status: 'ativo', dia_ciclo: chip.dia_ciclo + 1, ultimo_aquecimento: today() }).eq('id', chip.id)
       }
       await loadData()
     }
@@ -1720,11 +1720,11 @@ function AquecimentoAdminTab({ chips, usuarios, contatosAquec, tarefasAquec, pes
   }
 
   const editChipDia = async (chipId, currentDia) => {
-    const novoDia = prompt(`Dia atual: ${currentDia}\nDigite o novo dia (1 a 7):`, currentDia)
+    const novoDia = prompt(`Dia atual: ${currentDia}\nDigite o novo dia (0 a 12):`, currentDia)
     if (!novoDia) return
     const dia = parseInt(novoDia)
-    if (isNaN(dia) || dia < 1 || dia > 7) { alert('Digite um número entre 1 e 7'); return }
-    const status = dia >= 7 ? 'ativo' : 'aquecendo'
+    if (isNaN(dia) || dia < 0 || dia > 12) { alert('Digite um número entre 0 e 12'); return }
+    const status = dia > 7 ? 'ativo' : 'aquecendo'
     await supabase.from('chips').update({ dia_ciclo: dia, status }).eq('id', chipId)
     await loadData()
   }
