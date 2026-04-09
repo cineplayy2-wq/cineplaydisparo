@@ -989,16 +989,33 @@ export default function App() {
 
           {/* MESSAGE PICKER MODAL - moved to render below */}
 
-          {/* SENT today */}
+          {/* ENVIADOS - always visible with check/x buttons */}
           {enviados.length > 0 && (
             <div style={{ marginBottom: 12 }}>
-              <button onClick={() => setShowEnviados(!showEnviados)} style={{ width: '100%', background: 'none', border: 'none', padding: '10px 0', cursor: 'pointer', fontFamily: T.font, color: T.dim, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                <I d={showEnviados ? ic.up : ic.down} size={16} color={T.dim} />Enviados hoje ({enviados.length})
-              </button>
-              {showEnviados && enviados.map(n => (
-                <div key={n.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', marginBottom: 2, borderRadius: T.r, background: T.s2, opacity: 0.7 }}>
-                  <I d={ic.check} size={14} color={T.green} />
-                  <div style={{ fontFamily: T.mono, fontSize: 13, flex: 1 }}>{formatPhone(n.numero)}</div>
+              {/* Ultimo disparo marker */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '12px 0 10px' }}>
+                <div style={{ flex: 1, height: 1, background: T.purple }} />
+                <div style={{ fontSize: 10, fontWeight: 600, color: T.purple, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill={T.purple}><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>
+                  Último disparo a partir daqui
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill={T.purple}><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>
+                </div>
+                <div style={{ flex: 1, height: 1, background: T.purple }} />
+              </div>
+
+              <div style={{ fontSize: 11, color: T.dim, textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 500, marginBottom: 8 }}>Enviados ({enviados.length})</div>
+              {enviados.map(n => (
+                <div key={n.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', marginBottom: 3, borderRadius: T.r, background: T.s1, border: `1px solid ${T.border}` }}>
+                  <I d={ic.check} size={16} color={T.green} />
+                  <div style={{ fontFamily: T.mono, fontSize: 14, flex: 1 }}>{formatPhone(n.numero)}</div>
+                  {/* OK button (already ok, just visual) */}
+                  <button style={{ width: 30, height: 30, borderRadius: 8, background: T.greenGlow, border: `1px solid ${T.green}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'default' }}>
+                    <I d={ic.check} size={14} color={T.green} />
+                  </button>
+                  {/* ERROR button - sends back to pending */}
+                  <button onClick={() => desmarcarEnviado(n.id)} style={{ width: 30, height: 30, borderRadius: 8, background: T.redGlow, border: `1px solid ${T.red}44`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <I d={ic.close} size={14} color={T.red} />
+                  </button>
                 </div>
               ))}
             </div>
