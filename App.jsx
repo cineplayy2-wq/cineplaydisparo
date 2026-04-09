@@ -695,7 +695,8 @@ export default function App() {
               {aquecTotal > 0 && <div style={{ height: 4, background: T.s2 }}><div style={{ height: '100%', width: `${(aquecConcluidas / aquecTotal) * 100}%`, background: aquecDone ? T.green : `linear-gradient(90deg, ${T.amber}, #f97316)`, transition: 'width .3s' }} /></div>}
             </button>
 
-            {/* DISPARO CARD */}
+            {/* DISPARO CARD - only shows from day 6+ */}
+            {(!meuChip || meuChip.dia_ciclo >= 6) && (
             <button onClick={() => setFuncScreen('disparo')} style={{ width: '100%', textAlign: 'left', padding: 0, marginBottom: 12, borderRadius: T.r2, background: 'linear-gradient(135deg, #1a1f3a, #1e2740)', border: `2px solid ${disparoDone ? T.green + '44' : T.purple + '33'}`, cursor: 'pointer', fontFamily: T.font, color: T.text, overflow: 'hidden' }}>
               <div style={{ padding: '20px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
                 <div style={{ width: 52, height: 52, borderRadius: 14, background: disparoDone ? 'linear-gradient(135deg, #22c55e, #16a34a)' : 'linear-gradient(135deg, #a78bfa, #7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: disparoDone ? '0 4px 20px rgba(34,197,94,.3)' : '0 4px 20px rgba(167,139,250,.3)', flexShrink: 0 }}>
@@ -712,6 +713,13 @@ export default function App() {
               </div>
               {disparoTotal > 0 && <div style={{ height: 4, background: T.s2 }}><div style={{ height: '100%', width: `${(disparoEnviados.length / disparoTotal) * 100}%`, background: disparoDone ? T.green : `linear-gradient(90deg, ${T.purple}, ${T.blue})`, transition: 'width .3s' }} /></div>}
             </button>
+            )}
+            {meuChip && meuChip.dia_ciclo < 6 && (
+              <div style={{ padding: '16px 18px', borderRadius: T.r2, background: T.s2, border: `1px solid ${T.border}`, textAlign: 'center' }}>
+                <div style={{ fontSize: 13, color: T.dim }}>🚀 Disparos liberados a partir do <span style={{ color: T.purple, fontWeight: 600 }}>Dia 6</span></div>
+                <div style={{ fontSize: 11, color: T.dim, marginTop: 4 }}>Você está no Dia {meuChip.dia_ciclo}/7 do aquecimento</div>
+              </div>
+            )}
           </div>
         </div>
       )
@@ -1711,6 +1719,16 @@ function AquecimentoAdminTab({ chips, usuarios, contatosAquec, tarefasAquec, pes
     await loadData()
   }
 
+  const editChipDia = async (chipId, currentDia) => {
+    const novoDia = prompt(`Dia atual: ${currentDia}\nDigite o novo dia (1 a 7):`, currentDia)
+    if (!novoDia) return
+    const dia = parseInt(novoDia)
+    if (isNaN(dia) || dia < 1 || dia > 7) { alert('Digite um número entre 1 e 7'); return }
+    const status = dia >= 7 ? 'ativo' : 'aquecendo'
+    await supabase.from('chips').update({ dia_ciclo: dia, status }).eq('id', chipId)
+    await loadData()
+  }
+
   const deleteChip = async (chipId) => {
     if (!confirm('Excluir este chip?')) return
     await supabase.from('chips').delete().eq('id', chipId)
@@ -1759,6 +1777,7 @@ function AquecimentoAdminTab({ chips, usuarios, contatosAquec, tarefasAquec, pes
                 {total > 0 && ` • ${feitas}/${total} tarefas`}
                 {regra && ` • ${regra.disparos} disparos`}</div>
               </div>
+              <button onClick={() => editChipDia(ch.id, ch.dia_ciclo)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.blue, fontSize: 10, padding: 4 }} title="Editar dia">✏️</button>
               <button onClick={() => resetChip(ch.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.amber, fontSize: 10, padding: 4 }} title="Reiniciar ciclo">🔄</button>
               <button onClick={() => deleteChip(ch.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.red, fontSize: 10, padding: 4 }} title="Excluir">🗑</button>
             </div>
