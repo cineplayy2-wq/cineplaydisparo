@@ -518,7 +518,6 @@ export default function App() {
     const todasHoje = tarefasAquec.filter(t => t.chip_id === tarefa.chip_id && t.data === today())
     const todasConcluidas = todasHoje.every(t => t.id === tarefaId || t.concluida)
     if (todasConcluidas) {
-      // Advance chip day
       const chip = chips.find(c => c.id === tarefa.chip_id)
       if (chip && chip.dia_ciclo < 7) {
         await supabase.from('chips').update({ dia_ciclo: chip.dia_ciclo + 1, ultimo_aquecimento: today() }).eq('id', chip.id)
@@ -527,6 +526,11 @@ export default function App() {
       }
       await loadData()
     }
+  }
+
+  const desfazerTarefa = async (tarefaId) => {
+    await supabase.from('tarefas_aquecimento').update({ concluida: false, concluida_at: null }).eq('id', tarefaId)
+    await loadData()
   }
 
   // ─── Week ───
@@ -799,8 +803,15 @@ export default function App() {
                 {proxTarefa.tipo === 'salvar_contato' && (
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 10 }}>{proxTarefa.mensagem}</div>
-                    <div style={{ fontSize: 12, color: T.dim, marginBottom: 14 }}>Salve os contatos que aparecem na sua lista de conversas na agenda do celular.</div>
-                    <button onClick={() => concluirTarefa(proxTarefa.id)} style={{ ...css.btn('success'), width: '100%', justifyContent: 'center', padding: '12px 0' }}>✅ Contatos salvos</button>
+                    <div style={{ fontSize: 12, color: T.dim, marginBottom: 14 }}>Abra a agenda do celular e salve os contatos abaixo:</div>
+                    {contatosAquec.slice(0, 3).map(c => (
+                      <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', marginBottom: 4, borderRadius: T.r, background: T.s2 }}>
+                        <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 500 }}>{c.nome}</div><div style={{ fontSize: 12, fontFamily: T.mono, color: T.dim }}>{formatPhone(c.numero)}</div></div>
+                        <a href={`tel:+55${c.numero}`} onClick={e => { e.preventDefault(); if (navigator.share) { navigator.share({ title: c.nome, text: `${c.nome}: +55${c.numero}` }).catch(() => {}) } else { navigator.clipboard?.writeText(`+55${c.numero}`); alert('Número copiado! Cole na agenda.') } }}
+                          style={{ ...css.btn('primary'), padding: '6px 12px', fontSize: 11, textDecoration: 'none' }}>📋 Copiar</a>
+                      </div>
+                    ))}
+                    <button onClick={() => concluirTarefa(proxTarefa.id)} style={{ ...css.btn('success'), width: '100%', justifyContent: 'center', padding: '12px 0', marginTop: 10 }}>✅ Salvei na agenda</button>
                   </div>
                 )}
 
@@ -865,10 +876,20 @@ export default function App() {
               </div>
             )}
 
-            {/* Completed tasks */}
+            {/* Completed tasks with UNDO button */}
             {aquecConcluidas > 0 && !aquecDone && (
-              <div style={{ marginTop: 12, fontSize: 11, color: T.dim }}>
-                ✅ {aquecConcluidas} tarefa(s) concluída(s)
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 11, color: T.dim, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>✅ Concluídas ({aquecConcluidas})</div>
+                {aquecHoje.filter(t => t.concluida).reverse().map(t => {
+                  const contato = t.contato_id ? contatosAquec.find(c => c.id === t.contato_id) : null
+                  return (
+                    <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', marginBottom: 3, borderRadius: T.r, background: T.s2, opacity: 0.7 }}>
+                      <I d={ic.check} size={14} color={T.green} />
+                      <div style={{ flex: 1, fontSize: 12 }}>{t.tipo === 'mensagem' ? `Msg → ${contato?.nome || '?'}` : t.tipo === 'ligacao' ? `Ligação → ${contato?.nome || '?'}` : t.mensagem}</div>
+                      <button onClick={() => desfazerTarefa(t.id)} style={{ background: T.amberGlow, border: `1px solid ${T.amber}33`, borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontFamily: T.font, fontSize: 10, fontWeight: 600, color: T.amber }}>↩ Voltar</button>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -1713,6 +1734,41 @@ function AquecimentoAdminTab({ chips, usuarios, contatosAquec, tarefasAquec, pes
     await loadData()
   }
 
+  const editContato = async (id, campo) => {
+    const contato = contatosAquec.find(c => c.id === id)
+    if (!contato) return
+    if (campo === 'nome') {
+      const novo = prompt('Novo nome:', contato.nome)
+      if (!novo || !novo.trim()) return
+      await supabase.from('contatos_aquecimento').update({ nome: novo.trim() }).eq('id', id)
+    } else {
+      const novo = prompt('Novo número:', contato.numero)
+      if (!novo || !novo.trim()) return
+      let clean = novo.replace(/\D/g, '')
+      if (clean.length === 13 && clean.startsWith('55')) clean = clean.slice(2)
+      if (clean.length === 12 && clean.startsWith('55')) clean = clean.slice(2)
+      await supabase.from('contatos_aquecimento').update({ numero: clean }).eq('id', id)
+    }
+    await loadData()
+  }
+
+  const toggleChipBloqueio = async (chipId, currentStatus) => {
+    const novoStatus = currentStatus === 'bloqueado' ? 'aquecendo' : 'bloqueado'
+    await supabase.from('chips').update({ status: novoStatus }).eq('id', chipId)
+    await loadData()
+  }
+
+  const registrarCaiu = async (chipId) => {
+    const chip = chips.find(c => c.id === chipId)
+    const usr = usuarios.find(u => u.id === chip?.usuario_id)
+    const agora = new Date()
+    const hora = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    await supabase.from('bloqueios').insert({ usuario_id: chip?.usuario_id, tipo: 'caiu', data: today(), hora })
+    await supabase.from('chips').update({ status: 'bloqueado', dia_ciclo: 1, inicio_ciclo: today() }).eq('id', chipId)
+    alert(`Registrado: Chip ${usr?.nome || ''} caiu em ${formatDate(today())} às ${hora}. Ciclo reiniciado.`)
+    await loadData()
+  }
+
   const resetChip = async (chipId) => {
     if (!confirm('Reiniciar ciclo deste chip? Volta pro Dia 1.')) return
     await supabase.from('chips').update({ dia_ciclo: 1, status: 'aquecendo', inicio_ciclo: today() }).eq('id', chipId)
@@ -1777,7 +1833,10 @@ function AquecimentoAdminTab({ chips, usuarios, contatosAquec, tarefasAquec, pes
                 {total > 0 && ` • ${feitas}/${total} tarefas`}
                 {regra && ` • ${regra.disparos} disparos`}</div>
               </div>
+              <button onClick={() => { const n = prompt('Novo nome:', usr?.nome); if (n) supabase.from('usuarios').update({ nome: n.trim() }).eq('id', ch.usuario_id).then(() => loadData()) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.dim, fontSize: 10, padding: 4 }} title="Editar nome">📝</button>
               <button onClick={() => editChipDia(ch.id, ch.dia_ciclo)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.blue, fontSize: 10, padding: 4 }} title="Editar dia">✏️</button>
+              <button onClick={() => toggleChipBloqueio(ch.id, ch.status)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: ch.status === 'bloqueado' ? T.green : T.red, fontSize: 10, padding: 4 }} title={ch.status === 'bloqueado' ? 'Desbloquear' : 'Bloquear'}>{ch.status === 'bloqueado' ? '🔓' : '🔒'}</button>
+              <button onClick={() => registrarCaiu(ch.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.amber, fontSize: 10, padding: 4 }} title="Registrar queda">💥</button>
               <button onClick={() => resetChip(ch.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.amber, fontSize: 10, padding: 4 }} title="Reiniciar ciclo">🔄</button>
               <button onClick={() => deleteChip(ch.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.red, fontSize: 10, padding: 4 }} title="Excluir">🗑</button>
             </div>
@@ -1809,7 +1868,9 @@ function AquecimentoAdminTab({ chips, usuarios, contatosAquec, tarefasAquec, pes
               <div style={{ fontWeight: 500, fontSize: 13 }}>{c.nome}</div>
               <div style={{ fontSize: 11, color: T.dim, fontFamily: T.mono }}>{formatPhone(c.numero)}</div>
             </div>
-            <button onClick={() => deleteContato(c.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.red, fontSize: 10, padding: 4 }}>🗑</button>
+            <button onClick={() => editContato(c.id, 'nome')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.dim, fontSize: 10, padding: 4 }} title="Editar nome">📝</button>
+            <button onClick={() => editContato(c.id, 'numero')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.blue, fontSize: 10, padding: 4 }} title="Editar número">📞</button>
+            <button onClick={() => deleteContato(c.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.red, fontSize: 10, padding: 4 }} title="Excluir">🗑</button>
           </div>
         ))}
       </div>
